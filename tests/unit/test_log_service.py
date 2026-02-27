@@ -4,6 +4,7 @@ from decimal import Decimal
 from unittest.mock import AsyncMock
 
 import pytest
+
 from app.domain.models import (
     DataSource,
     GeneralizedProduct,
