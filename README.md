@@ -751,7 +751,7 @@ DEBUG=true
 
 ## 📄 License
 
-MIT License. See [LICENSE](LICENSE) for details. :D
+MIT License. See [LICENSE](LICENSE) for details.
 
 ---
 
