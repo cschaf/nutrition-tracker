@@ -185,7 +185,7 @@ ruff check src/ tests/ --fix --unsafe-fixes
 # Final check — must return zero errors
 ruff check src/ tests/
 
-# Type checking
+# Type checking — must return zero errors
 mypy src/app --strict
 ```
 
@@ -247,6 +247,149 @@ If any step fails, the build is blocked. Fix locally, do not push and wait for C
 
 ---
 
+## 4a. mypy --strict Compliance Rules
+
+**This project runs `mypy src/app --strict`. Every file you touch must pass with zero errors.**
+These are the patterns that have caused CI failures in the past — memorize them.
+
+### 4a.1 Never use `str, Enum` — use `StrEnum`
+
+The `str, Enum` multiple-inheritance pattern causes MRO conflicts under mypy strict.
+
+```python
+# ❌ BREAKS mypy --strict
+from enum import Enum
+class DataSource(str, Enum):
+    OPEN_FOOD_FACTS = "open_food_facts"
+
+# ✅ CORRECT — Python 3.11+
+from enum import StrEnum
+class DataSource(StrEnum):
+    OPEN_FOOD_FACTS = "open_food_facts"
+```
+
+### 4a.2 HTTP params dicts must be `dict[str, str]`
+
+`httpx.AsyncClient.get(params=...)` expects a typed mapping. A plain `dict` with mixed `int`/`str`/`float` values fails mypy strict. Convert all values to `str`.
+
+```python
+# ❌ BREAKS mypy — dict[str, object] inferred
+params = {
+    "search_simple": 1,       # int — not allowed
+    "page_size": limit,       # int — not allowed
+    "action": "process",
+}
+
+# ✅ CORRECT — explicit dict[str, str]
+params: dict[str, str] = {
+    "search_simple": "1",
+    "page_size": str(limit),
+    "action": "process",
+}
+```
+
+### 4a.3 Always pass Enum members — never raw strings — to Pydantic models
+
+```python
+# ❌ BREAKS mypy — str is not DataSource
+GeneralizedProduct(source="open_food_facts", ...)
+
+# ✅ CORRECT
+GeneralizedProduct(source=DataSource.OPEN_FOOD_FACTS, ...)
+```
+
+### 4a.4 Adapter registry keys must be Enum members
+
+```python
+# ❌ BREAKS mypy — dict[str, Adapter] is not dict[DataSource, ProductSourcePort]
+return {
+    "open_food_facts": off_adapter,
+    "usda_fooddata": usda_adapter,
+}
+
+# ✅ CORRECT
+return {
+    DataSource.OPEN_FOOD_FACTS: off_adapter,
+    DataSource.USDA_FOODDATA: usda_adapter,
+}
+```
+
+### 4a.5 FastAPI endpoints — use `Annotated` deps, never `= None` default
+
+mypy strict prohibits implicit `Optional`. FastAPI dependency arguments with `= None` as default break this rule.
+
+```python
+# ❌ BREAKS mypy — default None is incompatible with LogService type
+@router.get("/daily")
+def get_daily_log(
+    tenant_id: TenantDep = "",
+    service: ServiceDep = None,    # ← mypy error
+) -> list[LogEntry]: ...
+
+# ✅ CORRECT — Annotated deps need no default value
+TenantDep = Annotated[str, Security(get_tenant_id)]
+ServiceDep = Annotated[LogService, Depends(get_log_service)]
+
+@router.get("/daily")
+def get_daily_log(
+    tenant_id: TenantDep,          # no default needed
+    service: ServiceDep,           # no default needed
+    log_date: date | None = None,  # optional query param goes last
+) -> list[LogEntry]: ...
+```
+
+**Rule:** `Annotated[Type, Depends(...)]` and `Annotated[str, Security(...)]` dependency arguments never need a default value. Put all optional query/path parameters after them.
+
+### 4a.6 Health check endpoints must return `dict[str, str]`
+
+```python
+# ❌ BREAKS mypy — missing type parameters for generic type "dict"
+async def health_check() -> dict:
+    return {"status": "ok"}
+
+# ✅ CORRECT
+async def health_check() -> dict[str, str]:
+    return {"status": "ok", "version": settings.app_version}
+```
+
+### 4a.7 Complex internal dicts need explicit type annotations
+
+When a dict maps to another dict with mixed value types, mypy cannot infer the type correctly. Annotate explicitly and use `cast()` where needed.
+
+```python
+from typing import cast
+
+# ❌ BREAKS mypy — inferred as dict[str, dict[str, object]]
+_NUTRIENT_MAP = {
+    "calories": {"ids": {1008}, "unit_factor": Decimal("1")},
+}
+
+# ✅ CORRECT
+_NUTRIENT_MAP: dict[str, dict[str, set[int] | Decimal]] = {
+    "calories": {"ids": {1008}, "unit_factor": Decimal("1")},
+}
+
+# When iterating, cast to concrete type:
+for nid in cast(set[int], meta["ids"]):
+    ...
+```
+
+### 4a.8 Third-party libraries with incompatible signatures — use `# type: ignore[arg-type]`
+
+Some third-party libraries (e.g. `slowapi`) have handler signatures that do not match Starlette's expected type. Do not restructure your code to work around this — use a targeted ignore:
+
+```python
+# slowapi's handler signature is intentionally incompatible with Starlette's type
+app.add_exception_handler(
+    RateLimitExceeded,
+    _rate_limit_exceeded_handler,  # type: ignore[arg-type]
+)
+```
+
+Only use `# type: ignore` for genuinely incompatible third-party signatures. Never use it to silence errors in your own code.
+
+---
+
 ## 5. Testing Requirements
 
 Every code change requires corresponding tests. No exceptions.
@@ -294,7 +437,107 @@ async def test_tenant_isolation():
     assert len(result) == 0  # Bob sees nothing
 ```
 
-### 5.4 Coverage Targets
+### 5.4 pytest Exit Code 5 — "No Tests Collected"
+
+**Exit code 5 means pytest found no test functions.** CI treats this as a failure. This happens when:
+
+- A test file exists but contains no functions starting with `test_`
+- A test directory exists but has no `.py` files at all
+- All test files are empty placeholders
+
+**Rules to prevent exit code 5:**
+
+1. Every file in `tests/` that ends in `.py` (other than `conftest.py` and `__init__.py`) **must contain at least one test function**.
+2. Never leave a test file as an empty placeholder — use a minimal skeleton instead:
+
+```python
+# tests/integration/test_api_logs.py
+# MINIMUM REQUIRED CONTENT — add real tests here
+
+import pytest
+from fastapi.testclient import TestClient
+
+
+def test_health_check(client: TestClient) -> None:
+    response = client.get("/healthz")
+    assert response.status_code == 200
+
+
+def test_readiness_check(client: TestClient) -> None:
+    response = client.get("/readyz")
+    assert response.status_code == 200
+
+
+def test_unauthenticated_request_returns_401(client: TestClient) -> None:
+    response = client.post("/api/v1/logs/", json={})
+    assert response.status_code == 403  # missing header → 403 from APIKeyHeader
+
+
+def test_invalid_api_key_returns_401(client: TestClient) -> None:
+    response = client.post(
+        "/api/v1/logs/",
+        headers={"X-API-Key": "invalid-key"},
+        json={},
+    )
+    assert response.status_code == 401
+
+
+def test_get_daily_log_empty(client: TestClient, alice_headers: dict[str, str]) -> None:
+    response = client.get("/api/v1/logs/daily", headers=alice_headers)
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_get_daily_nutrition_empty(client: TestClient, alice_headers: dict[str, str]) -> None:
+    response = client.get("/api/v1/logs/daily/nutrition", headers=alice_headers)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total_entries"] == 0
+    assert data["totals"]["calories_kcal"] == "0"
+
+
+def test_get_daily_hydration_empty(client: TestClient, alice_headers: dict[str, str]) -> None:
+    response = client.get("/api/v1/logs/daily/hydration", headers=alice_headers)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total_volume_ml"] == "0"
+    assert data["contributing_entries"] == 0
+
+
+def test_get_nonexistent_entry_returns_404(
+    client: TestClient, alice_headers: dict[str, str]
+) -> None:
+    response = client.get(
+        "/api/v1/logs/00000000-0000-0000-0000-000000000000",
+        headers=alice_headers,
+    )
+    assert response.status_code == 404
+
+
+def test_delete_nonexistent_entry_returns_404(
+    client: TestClient, alice_headers: dict[str, str]
+) -> None:
+    response = client.delete(
+        "/api/v1/logs/00000000-0000-0000-0000-000000000000",
+        headers=alice_headers,
+    )
+    assert response.status_code == 404
+```
+
+3. If `tests/integration/` will be empty for a sprint, configure pytest to not fail on empty collections by adding to `pyproject.toml`:
+
+```toml
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+# Prevent exit code 5 when a directory has no tests yet:
+# Remove this line once all test files are populated
+addopts = "--ignore=tests/integration"
+```
+
+But prefer option 2 — always have at least the baseline HTTP tests above.
+
+### 5.5 Coverage Targets
 
 | Module | Minimum |
 |---|---|
@@ -430,3 +673,10 @@ git push --tags
 | Push directly to `main` without PR | Use pull requests for review |
 | Hardcode config values | Use `core/config.py` + env vars |
 | Add new ruff suppressions without documenting | Creates undocumented tech debt |
+| Use `str, Enum` instead of `StrEnum` | MRO conflict breaks mypy strict |
+| Pass raw strings where Enum members are expected | mypy strict type error |
+| Use `dict` without type parameters | mypy strict requires `dict[K, V]` |
+| Use untyped `dict` as httpx `params` | Incompatible type error in mypy strict |
+| Add `= None` default to FastAPI `Annotated` deps | Implicit Optional breaks mypy strict |
+| Leave test files empty or with no test functions | pytest exits with code 5, CI fails |
+| Use `# type: ignore` in your own code | Only allowed for third-party signature mismatches |

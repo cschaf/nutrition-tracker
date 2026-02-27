@@ -577,6 +577,14 @@ pytest tests/integration/ -v
 pytest --cov=app --cov-report=term-missing
 ```
 
+### Known CI Failure: pytest Exit Code 5
+
+**Exit code 5 = no tests collected.** This happens when a test file exists but contains no `test_` functions — typically when placeholder files are left empty. Every `.py` file under `tests/` (except `conftest.py` and `__init__.py`) must contain at least one test function. The baseline integration tests covering health checks and 401/404 responses are the minimum acceptable content for `tests/integration/test_api_logs.py`.
+
+### Known CI Failure: mypy --strict
+
+This project enforces `mypy src/app --strict`. Common patterns that break it are documented in `AGENTS.md` Section 4a with correct/incorrect examples. The most frequent causes of failures are using `str, Enum` instead of `StrEnum`, untyped `dict` for httpx params, raw strings where Enum members are expected, and FastAPI endpoint arguments with `= None` defaults.
+
 ### Coverage Targets
 
 | Module | Minimum |
@@ -598,15 +606,17 @@ pytest --cov=app --cov-report=term-missing
 |---|---|
 | All architecture rules | `AGENTS.md` Section 2 |
 | Linting requirements | `AGENTS.md` Section 4 |
+| **mypy --strict patterns (read before touching any file)** | **`AGENTS.md` Section 4a** |
 | Adding a new data source | `AGENTS.md` Section 6 |
 | Adding a new endpoint | `AGENTS.md` Section 7 |
 | Replacing the repository | `AGENTS.md` Section 8 |
 | Unit conversion table | `AGENTS.md` Section 10 |
+| **pytest exit code 5 fix + integration test baseline** | **`AGENTS.md` Section 5.4** |
 | What NOT to do | `AGENTS.md` Section 12 |
 
 ### Critical Files (read in this order)
 
-1. `AGENTS.md` — contributor rules
+1. `AGENTS.md` — contributor rules, **especially Section 4a (mypy) and Section 5.4 (pytest)**
 2. `src/app/domain/models.py` — all data shapes
 3. `src/app/domain/ports.py` — adapter interface contract
 4. `src/app/api/dependencies.py` — DI wiring
