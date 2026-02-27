@@ -42,15 +42,14 @@ class SQLiteLogRepository(AbstractLogRepository):
             await conn.run_sync(Base.metadata.create_all)
 
     async def save(self, entry: LogEntry) -> LogEntry:
-        async with self.async_session_maker() as session:
-            async with session.begin():
-                orm_entry = LogEntryORM(
-                    id=entry.id,
-                    tenant_id=entry.tenant_id,
-                    log_date=entry.log_date,
-                    data=entry.model_dump_json(),
-                )
-                session.add(orm_entry)
+        async with self.async_session_maker() as session, session.begin():
+            orm_entry = LogEntryORM(
+                id=entry.id,
+                tenant_id=entry.tenant_id,
+                log_date=entry.log_date,
+                data=entry.model_dump_json(),
+            )
+            session.add(orm_entry)
         return entry
 
     async def find_by_id(self, tenant_id: str, entry_id: str) -> LogEntry | None:
@@ -75,37 +74,35 @@ class SQLiteLogRepository(AbstractLogRepository):
             return [LogEntry.model_validate_json(row.data) for row in result.scalars()]
 
     async def delete(self, tenant_id: str, entry_id: str) -> bool:
-        async with self.async_session_maker() as session:
-            async with session.begin():
-                result = await session.execute(
-                    delete(LogEntryORM).where(
-                        LogEntryORM.id == entry_id, LogEntryORM.tenant_id == tenant_id
-                    )
+        async with self.async_session_maker() as session, session.begin():
+            result = await session.execute(
+                delete(LogEntryORM).where(
+                    LogEntryORM.id == entry_id, LogEntryORM.tenant_id == tenant_id
                 )
-                if isinstance(result, CursorResult):
-                    return bool(result.rowcount > 0)
-                return False
+            )
+            if isinstance(result, CursorResult):
+                return bool(result.rowcount > 0)
+            return False
 
     async def update(self, entry: LogEntry) -> LogEntry:
-        async with self.async_session_maker() as session:
-            async with session.begin():
-                result = await session.execute(
-                    select(LogEntryORM).where(
-                        LogEntryORM.id == entry.id, LogEntryORM.tenant_id == entry.tenant_id
-                    )
+        async with self.async_session_maker() as session, session.begin():
+            result = await session.execute(
+                select(LogEntryORM).where(
+                    LogEntryORM.id == entry.id, LogEntryORM.tenant_id == entry.tenant_id
                 )
-                orm_entry = result.scalar_one_or_none()
-                if orm_entry:
-                    orm_entry.log_date = entry.log_date
-                    orm_entry.data = entry.model_dump_json()
-                else:
-                    # If not found, we could raise an error or just save it.
-                    # InMemoryLogRepository.update just overwrites.
-                    orm_entry = LogEntryORM(
-                        id=entry.id,
-                        tenant_id=entry.tenant_id,
-                        log_date=entry.log_date,
-                        data=entry.model_dump_json(),
-                    )
-                    session.add(orm_entry)
+            )
+            orm_entry = result.scalar_one_or_none()
+            if orm_entry:
+                orm_entry.log_date = entry.log_date
+                orm_entry.data = entry.model_dump_json()
+            else:
+                # If not found, we could raise an error or just save it.
+                # InMemoryLogRepository.update just overwrites.
+                orm_entry = LogEntryORM(
+                    id=entry.id,
+                    tenant_id=entry.tenant_id,
+                    log_date=entry.log_date,
+                    data=entry.model_dump_json(),
+                )
+                session.add(orm_entry)
         return entry
