@@ -1,7 +1,7 @@
 # 🥗 Nutrition & Hydration Tracking API
 
 > A cloud-native, multi-tenant REST API for tracking daily nutrition and hydration intake.
-> Built with FastAPI, Python 3.12, and designed for Kubernetes/Homelab deployment.
+> Built with FastAPI, Python 3.12, and designed for Kubernetes/Homelab deployment via FluxCD.
 
 [![CI Pipeline](https://img.shields.io/github/actions/workflow/status/your-org/nutrition-tracker/ci.yml?label=CI&logo=github)](/.github/workflows/ci.yml)
 [![Helm Lint](https://img.shields.io/badge/helm-lint%20passing-blue?logo=helm)](deploy/charts/nutrition-tracker)
@@ -20,6 +20,7 @@
 - [API Reference](#-api-reference)
 - [Quick Start (Local)](#-quick-start-local)
 - [Configuration](#-configuration)
+- [Linting & Code Quality](#-linting--code-quality)
 - [Docker](#-docker)
 - [Kubernetes / Helm Deployment](#-kubernetes--helm-deployment)
 - [CI/CD Pipeline](#-cicd-pipeline)
@@ -109,7 +110,7 @@ nutrition-tracker/
 ├── .github/
 │   └── workflows/
 │       ├── ci.yml              # Lint, Type-Check, Unit + Integration Tests, Helm Lint
-│       └── cd.yml              # Docker Build/Push to GHCR, Helm Deploy on git tag
+│       └── cd.yml              # Docker Build/Push to GHCR on git tag
 │
 ├── src/
 │   └── app/
@@ -154,9 +155,11 @@ nutrition-tracker/
 │               ├── configmap.yaml  # Non-sensitive env vars
 │               └── secret.yaml     # API_KEYS + USDA_API_KEY (b64 encoded)
 │
-├── Dockerfile                  # Multi-stage: builder + distroless runtime, non-root
+├── AGENTS.md                   # AI contributor guide (read before coding)
+├── Dockerfile                  # Multi-stage: builder + runtime, non-root user
 ├── .dockerignore
-├── pyproject.toml              # Project metadata, deps, dev deps, tool configs (ruff, mypy, pytest)
+├── .pre-commit-config.yaml     # ruff auto-fix on every local commit
+├── pyproject.toml              # Project metadata, deps, dev deps, tool configs
 └── README.md                   # This file
 ```
 
@@ -170,7 +173,7 @@ nutrition-tracker/
 GeneralizedProduct (frozen, source-agnostic)
 │
 ├── id: str                        # Source-native ID (barcode or fdcId)
-├── source: DataSource             # Enum: OPEN_FOOD_FACTS | USDA_FOODDATA | MANUAL
+├── source: DataSource             # StrEnum: OPEN_FOOD_FACTS | USDA_FOODDATA | MANUAL
 ├── name: str
 ├── brand: str | None
 ├── barcode: str | None
@@ -196,42 +199,35 @@ LogEntry
 ├── id: str (UUID)
 ├── tenant_id: str                 # Derived from API key — enforces isolation
 ├── log_date: date
-├── product: GeneralizedProduct    # Embedded snapshot
-├── quantity_g: Decimal            # Consumed amount in grams (or g-equivalent for liquids)
+├── product: GeneralizedProduct    # Embedded snapshot at time of logging
+├── quantity_g: Decimal
 ├── consumed_at: datetime (UTC)
 ├── note: str | None
 │
-├── [property] scaled_macros       # Computes absolute macros for quantity_g
-└── [property] consumed_volume_ml  # Returns ml if is_liquid, else None
+├── [property] scaled_macros       # Absolute macros for quantity_g
+└── [property] consumed_volume_ml  # ml if is_liquid, else None
 ```
 
 ### Data Flow: External API → Internal Domain
 
 ```
-User Request: POST /api/v1/logs  { product_id: "5449000000996", source: "open_food_facts", quantity_g: 330 }
-                │
-                ▼
-        LogService.create_entry()
-                │
-                ▼
-        AdapterRegistry.get(DataSource.OPEN_FOOD_FACTS)
-                │
-                ▼
-        OpenFoodFactsAdapter.fetch_by_id("5449000000996")
-                │   [HTTP GET world.openfoodfacts.org/api/v0/product/...]
-                │   [Parse _OffResponse → _OffProduct]
-                │   [Normalize: detect liquid, convert units, map nulls]
-                ▼
-        GeneralizedProduct(source=OPEN_FOOD_FACTS, is_liquid=True, ...)
-                │
-                ▼
-        LogEntry(tenant_id="tenant_alice", product=..., quantity_g=330)
-                │
-                ▼
-        InMemoryLogRepository.save(entry)
-                │
-                ▼
-        HTTP 201 Created → LogEntry JSON
+POST /api/v1/logs  { product_id: "5449000000996", source: "open_food_facts", quantity_g: 330 }
+        │
+        ▼
+LogService.create_entry()
+        │
+        ▼
+AdapterRegistry[DataSource.OPEN_FOOD_FACTS].fetch_by_id("5449000000996")
+        │   HTTP GET → world.openfoodfacts.org
+        │   Parse _OffResponse → normalize → GeneralizedProduct
+        ▼
+LogEntry(tenant_id="tenant_alice", product=..., quantity_g=330)
+        │
+        ▼
+InMemoryLogRepository.save(entry)
+        │
+        ▼
+HTTP 201 Created
 ```
 
 ---
@@ -260,28 +256,20 @@ User Request: POST /api/v1/logs  { product_id: "5449000000996", source: "open_fo
 ### Example Requests
 
 **Log a beverage (Coca-Cola by barcode):**
-```bash
-curl -X POST http://localhost:8000/api/v1/logs/ \
-  -H "X-API-Key: your-key-here" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "product_id": "5449000000996",
-    "source": "open_food_facts",
-    "quantity_g": 330
-  }'
+```powershell
+# PowerShell
+Invoke-RestMethod -Uri "http://localhost:8000/api/v1/logs/" `
+  -Method POST `
+  -Headers @{"X-API-Key"="your-key-here"; "Content-Type"="application/json"} `
+  -Body '{"product_id":"5449000000996","source":"open_food_facts","quantity_g":330}'
 ```
 
-**Log a USDA food item:**
 ```bash
+# bash/curl
 curl -X POST http://localhost:8000/api/v1/logs/ \
   -H "X-API-Key: your-key-here" \
   -H "Content-Type: application/json" \
-  -d '{
-    "product_id": "171705",
-    "source": "usda_fooddata",
-    "quantity_g": 150,
-    "note": "Lunch"
-  }'
+  -d '{"product_id":"5449000000996","source":"open_food_facts","quantity_g":330}'
 ```
 
 **Get today's hydration summary:**
@@ -297,7 +285,7 @@ curl http://localhost:8000/api/v1/logs/daily/hydration \
 # }
 ```
 
-**Get daily nutrition totals for a specific date:**
+**Get daily nutrition totals:**
 ```bash
 curl "http://localhost:8000/api/v1/logs/daily/nutrition?log_date=2025-06-14" \
   -H "X-API-Key: your-key-here"
@@ -310,19 +298,9 @@ curl "http://localhost:8000/api/v1/logs/daily/nutrition?log_date=2025-06-14" \
 #     "calories_kcal": "1842.30",
 #     "protein_g": "98.40",
 #     "carbohydrates_g": "210.75",
-#     "fat_g": "62.10",
-#     "fiber_g": "24.50",
-#     "sugar_g": "88.20"
+#     "fat_g": "62.10"
 #   }
 # }
-```
-
-**Update a log entry:**
-```bash
-curl -X PATCH http://localhost:8000/api/v1/logs/<entry-uuid> \
-  -H "X-API-Key: your-key-here" \
-  -H "Content-Type: application/json" \
-  -d '{"quantity_g": 200, "note": "corrected portion"}'
 ```
 
 ---
@@ -332,33 +310,38 @@ curl -X PATCH http://localhost:8000/api/v1/logs/<entry-uuid> \
 ### Prerequisites
 
 - Python 3.12+
-- `pip` or `uv`
+- pip
 
 ### Setup
 
 ```bash
-# 1. Clone the repository
+# 1. Clone
 git clone https://github.com/your-org/nutrition-tracker.git
 cd nutrition-tracker
 
-# 2. Create virtual environment and install dependencies
+# 2. Virtual environment
 python -m venv .venv
-source .venv/bin/activate          # Windows: .venv\Scripts\activate
+source .venv/bin/activate   # Windows PowerShell: .venv\Scripts\Activate.ps1
+
+# 3. Install
 pip install -e ".[dev]"
 
-# 3. Create local configuration
+# 4. Install pre-commit hooks (runs ruff automatically on every commit)
+pip install pre-commit
+pre-commit install
+
+# 5. Create .env
 cat > .env << 'EOF'
-# JSON map of API_KEY -> tenant_id
 API_KEYS={"dev-key-alice": "tenant_alice", "dev-key-bob": "tenant_bob"}
 USDA_API_KEY=DEMO_KEY
 DEBUG=true
 CORS_ORIGINS=["*"]
 EOF
 
-# 4. Run the development server
+# 6. Run
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
-# 5. Open Swagger UI
+# 7. Open docs
 open http://localhost:8000/docs
 ```
 
@@ -366,18 +349,70 @@ open http://localhost:8000/docs
 
 ## ⚙️ Configuration
 
-All configuration is managed via environment variables (or a `.env` file). The app uses `pydantic-settings` for typed, validated config loading.
+All configuration via environment variables or `.env`. Managed by `pydantic-settings`.
 
 | Variable | Type | Default | Description |
 |---|---|---|---|
-| `API_KEYS` | `JSON dict` | `{}` | Maps API keys to tenant IDs: `{"key": "tenant_id"}` |
-| `USDA_API_KEY` | `string` | `DEMO_KEY` | USDA FoodData Central API key ([get one here](https://fdc.nal.usda.gov/api-key-signup.html)) |
-| `DEBUG` | `bool` | `false` | Enables debug logging |
-| `CORS_ORIGINS` | `JSON list` | `["*"]` | Allowed CORS origins |
-| `RATE_LIMIT_REQUESTS` | `int` | `100` | Max requests per window |
-| `RATE_LIMIT_WINDOW_SECONDS` | `int` | `60` | Rate limit window in seconds |
+| `API_KEYS` | JSON dict | `{}` | Maps API keys to tenant IDs: `{"key": "tenant_id"}` |
+| `USDA_API_KEY` | string | `DEMO_KEY` | USDA FoodData Central API key ([signup](https://fdc.nal.usda.gov/api-key-signup.html)) |
+| `DEBUG` | bool | `false` | Enables debug logging |
+| `CORS_ORIGINS` | JSON list | `["*"]` | Allowed CORS origins |
+| `RATE_LIMIT_REQUESTS` | int | `100` | Max requests per window |
+| `RATE_LIMIT_WINDOW_SECONDS` | int | `60` | Rate limit window in seconds |
 
-> ⚠️ **Security Note:** Never commit `.env` to version control. In Kubernetes, inject `API_KEYS` and `USDA_API_KEY` via Kubernetes Secrets (see Helm section below).
+> ⚠️ Never commit `.env`. In Kubernetes, inject secrets via Helm `--set secrets.*` or External Secrets Operator.
+
+---
+
+## 🧹 Linting & Code Quality
+
+This project enforces code quality automatically at three levels.
+
+### Local: Pre-commit Hook
+
+Install once after cloning:
+
+```bash
+pip install pre-commit
+pre-commit install
+```
+
+After this, every `git commit` automatically runs ruff. A commit with lint errors is **rejected before it leaves your machine**.
+
+`.pre-commit-config.yaml`:
+```yaml
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.4.0
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+      - id: ruff-format
+```
+
+### Manual: Run Anytime
+
+```bash
+# Fix all auto-fixable issues
+ruff check src/ tests/ --fix
+ruff check src/ tests/ --fix --unsafe-fixes
+
+# Final check (must be zero errors before pushing)
+ruff check src/ tests/
+
+# Type checking
+mypy src/app --strict
+```
+
+### CI: Automatic on Every Push
+
+The CI pipeline runs ruff with `--fix`, commits any auto-fixes back to the branch, then runs a final check. If manual fixes are still required, the build fails and shows exactly which lines need attention.
+
+### Suppressed Rules
+
+| Rule | File | Reason |
+|---|---|---|
+| `B008` | `pyproject.toml` | `Depends()` in function signatures is the standard FastAPI DI pattern |
 
 ---
 
@@ -389,7 +424,18 @@ All configuration is managed via environment variables (or a `.env` file). The a
 docker build -t nutrition-tracker:latest .
 ```
 
-### Run
+### Run (PowerShell)
+
+```powershell
+docker run -d `
+  --name nutrition-tracker `
+  -p 8000:8000 `
+  -e API_KEYS='{"prod-key-alice":"tenant_alice"}' `
+  -e USDA_API_KEY="your-usda-key" `
+  nutrition-tracker:latest
+```
+
+### Run (bash)
 
 ```bash
 docker run -d \
@@ -409,53 +455,44 @@ docker run -d \
 | Runtime user | Non-root (`uid=1001`) |
 | Filesystem | Read-only root (`/tmp` as `emptyDir`) |
 | Exposed port | `8000` |
-| Shutdown | Graceful via `SIGTERM` (uvicorn native) |
+| Shutdown | Graceful via `SIGTERM` |
 
 ---
 
 ## ☸️ Kubernetes / Helm Deployment
 
-### Prerequisites
+Deployment to the homelab k3s cluster is handled by **FluxCD**. Never deploy manually after the initial install.
 
-- Kubernetes cluster (k3s, k8s, etc.)
-- Helm 3.x
-- `kubectl` configured
+### Initial Install (once)
 
-### Install
+```powershell
+# From your machine with kubectl access to the cluster
 
-```bash
-# 1. Encode your secrets
-API_KEYS_B64=$(echo -n '{"your-prod-key":"tenant_alice"}' | base64)
-USDA_KEY_B64=$(echo -n 'your-usda-api-key' | base64)
+# Create namespace
+kubectl create namespace homelab
 
-# 2. Install the Helm chart
-helm install nutrition-tracker ./deploy/charts/nutrition-tracker \
-  --namespace homelab \
-  --create-namespace \
-  --set image.repository=ghcr.io/your-org/nutrition-tracker \
-  --set image.tag=1.0.0 \
-  --set secrets.apiKeys="${API_KEYS_B64}" \
-  --set secrets.usdaApiKey="${USDA_KEY_B64}" \
-  --set ingress.hosts[0].host=nutrition.homelab.local
+# Create secrets
+kubectl create secret generic nutrition-tracker-secret `
+  --namespace homelab `
+  --from-literal=api-keys='{"your-prod-key":"tenant_alice"}' `
+  --from-literal=usda-api-key="your-usda-key"
+
+# Helm install
+helm upgrade --install nutrition-tracker ./deploy/charts/nutrition-tracker `
+  --namespace homelab `
+  --set image.repository=ghcr.io/YOUR-GITHUB-USERNAME/nutrition-tracker `
+  --set image.tag=latest
 ```
 
-### Upgrade
-
-```bash
-helm upgrade nutrition-tracker ./deploy/charts/nutrition-tracker \
-  --namespace homelab \
-  --set image.tag=1.1.0
-```
+After this, FluxCD takes over. Push a new tag → CI builds the image → FluxCD rolls it out automatically.
 
 ### Key Helm Values
 
 ```yaml
-# values.yaml excerpt — most important overrides
-
-replicaCount: 2                  # Minimum for HA
+replicaCount: 2
 
 image:
-  repository: ghcr.io/your-org/nutrition-tracker
+  repository: ghcr.io/your-username/nutrition-tracker
   tag: "1.0.0"
 
 ingress:
@@ -470,11 +507,6 @@ resources:
   limits:
     cpu: "500m"
     memory: "256Mi"
-
-# Secrets: base64-encoded values
-secrets:
-  apiKeys: ""       # echo -n '{"key":"tenant"}' | base64
-  usdaApiKey: ""    # echo -n 'your-key' | base64
 ```
 
 ### Health Checks
@@ -488,221 +520,97 @@ secrets:
 
 ## 🔄 CI/CD Pipeline
 
-### CI (`.github/workflows/ci.yml`)
-
-Triggers on every push to `main`/`develop` and all pull requests.
+### CI (every push to `main` and PRs)
 
 ```
 Push / PR
     │
-    ├── lint-and-test
-    │   ├── ruff check src/ tests/       (linting)
-    │   ├── mypy src/app --strict        (type checking)
-    │   ├── pytest tests/unit/           (unit tests + coverage)
-    │   └── pytest tests/integration/   (integration tests)
-    │
-    ├── helm-lint
-    │   └── helm lint deploy/charts/nutrition-tracker/
-    │
-    └── docker-build (PR only)
-        └── docker build (no push, validation only)
+    ├── ruff --fix (auto-commits fixes)
+    ├── ruff check (fails if manual fixes needed)
+    ├── mypy --strict
+    ├── pytest tests/unit/
+    ├── pytest tests/integration/
+    └── helm lint
 ```
 
-### CD (`.github/workflows/cd.yml`)
-
-Triggers on semantic version tags (`v*.*.*`).
+### CD (on `git tag v*.*.*`)
 
 ```
 git tag v1.2.0 && git push --tags
     │
-    ├── build-and-push
-    │   ├── docker build --target runtime
-    │   └── docker push ghcr.io/your-org/nutrition-tracker:1.2.0
-    │
-    └── helm-package-and-deploy
-        ├── helm lint
-        └── helm upgrade --install (homelab environment)
+    ├── Docker build
+    └── Push ghcr.io/your-username/nutrition-tracker:1.2.0
+                          │
+                    FluxCD polls ghcr.io
+                          │
+                    kubectl rollout (automatic)
 ```
 
-### Release Process
+### Release
 
 ```bash
-# Bump version in pyproject.toml and Chart.yaml, then:
 git tag v1.2.0
-git push origin main --tags
-# → CD pipeline fires automatically
+git push --tags
+# Done — CI builds and pushes, FluxCD deploys
 ```
+
+### GitHub Repository Settings Required
+
+| Setting | Value |
+|---|---|
+| `Settings → Actions → Permissions` | Read and write permissions |
+| `Settings → Environments` | Create environment named `homelab` |
+| ghcr.io Package visibility | Set to **Public** so FluxCD can pull without image pull secret |
 
 ---
 
 ## 🧪 Testing
 
-### Run All Tests
-
 ```bash
-# Unit tests only (fast, no external deps)
+# Unit tests (fast, no external deps)
 pytest tests/unit/ -v
 
-# Integration tests (uses TestClient, still no real HTTP calls)
+# Integration tests
 pytest tests/integration/ -v
 
-# All tests with coverage report
-pytest --cov=app --cov-report=term-missing --cov-report=html
-open htmlcov/index.html
+# All with coverage
+pytest --cov=app --cov-report=term-missing
 ```
-
-### Test Architecture
-
-| Layer | Location | Strategy |
-|---|---|---|
-| **Unit** | `tests/unit/` | Mock `httpx.AsyncClient`; test adapter normalization and service logic in isolation |
-| **Integration** | `tests/integration/` | FastAPI `TestClient`; full HTTP cycle with overridden `get_settings()` dependency |
 
 ### Coverage Targets
 
-| Module | Target |
+| Module | Minimum |
 |---|---|
-| `adapters/` | ≥ 90% (normalization branches) |
-| `services/` | ≥ 95% (tenant isolation, aggregation) |
-| `api/` | ≥ 85% (HTTP status codes, auth failures) |
-| `domain/` | 100% (pure logic, no I/O) |
-
-### Adding a New Adapter (Test-Driven)
-
-```bash
-# 1. Write the failing test first
-tests/unit/test_adapters.py::test_new_source_normalizes_correctly
-
-# 2. Implement the adapter
-src/app/adapters/new_source.py
-
-# 3. Register in dependencies.py
-# 4. Add DataSource enum value in models.py
-```
+| `domain/` | 100% |
+| `services/` | 95% |
+| `adapters/` | 90% |
+| `api/` | 85% |
 
 ---
 
 ## 🤖 AI Agent Guide
 
-> **This section is specifically written for AI coding assistants (GitHub Copilot, Cursor, Claude, etc.) to understand the project context quickly and contribute effectively.**
+> AI agents (Claude, Copilot, Cursor, etc.) **must read [`AGENTS.md`](AGENTS.md) before making any changes** to this repository. It contains the complete contributor specification including architecture rules, linting requirements, testing patterns, and common pitfalls.
 
-### Mental Model
+### Quick Reference for AI
 
-This project is a **hexagonal architecture** FastAPI service. The core invariant is: **business logic never imports from adapters, and adapters never import from services.** Data flows inward through the `ProductSourcePort` interface.
-
-### Critical Files to Read First
-
-| File | Why |
+| Task | Where to look |
 |---|---|
-| `src/app/domain/models.py` | The single source of truth for all data shapes. Read this before touching any other file. |
-| `src/app/domain/ports.py` | Defines the adapter contract. Any new data source must implement `ProductSourcePort`. |
-| `src/app/api/dependencies.py` | Central DI wiring. If you add a new service or adapter, register it here. |
-| `src/app/core/config.py` | All environment variables. If you need a new config value, add it here first. |
+| All architecture rules | `AGENTS.md` Section 2 |
+| Linting requirements | `AGENTS.md` Section 4 |
+| Adding a new data source | `AGENTS.md` Section 6 |
+| Adding a new endpoint | `AGENTS.md` Section 7 |
+| Replacing the repository | `AGENTS.md` Section 8 |
+| Unit conversion table | `AGENTS.md` Section 10 |
+| What NOT to do | `AGENTS.md` Section 12 |
 
-### How to Add a New External Data Source
+### Critical Files (read in this order)
 
-1. Create `src/app/adapters/my_source.py`
-2. Implement `ProductSourcePort` (both `fetch_by_id` and `search`)
-3. Add `MY_SOURCE = "my_source"` to `DataSource` enum in `models.py`
-4. Add factory function to `dependencies.py`
-5. Register in `get_adapter_registry()` in `dependencies.py`
-6. Add unit tests in `tests/unit/test_adapters.py` with mocked `httpx.AsyncClient`
-
-```python
-# Minimal adapter skeleton
-class MySourceAdapter(ProductSourcePort):
-    def __init__(self, http_client: httpx.AsyncClient) -> None:
-        self._client = http_client
-
-    async def fetch_by_id(self, product_id: str) -> GeneralizedProduct:
-        # 1. HTTP GET to your external API
-        # 2. Parse raw response into internal Pydantic raw model
-        # 3. Call self._normalize(raw) → GeneralizedProduct
-        ...
-
-    async def search(self, query: str, limit: int = 10) -> list[GeneralizedProduct]:
-        ...
-
-    def _normalize(self, raw: ...) -> GeneralizedProduct:
-        # ALWAYS return GeneralizedProduct — never return raw external types
-        # Set is_liquid=True and volume_ml_per_100g=Decimal("100") for beverages
-        # Use _safe_decimal() helper for nullable float → Decimal conversion
-        ...
-```
-
-### How to Add a New API Endpoint
-
-1. Add route to `src/app/api/v1/logs.py` (or create a new router file)
-2. Use `Annotated[str, Security(get_tenant_id)]` for the tenant dep — **always**
-3. All business logic goes in `LogService`, not in the router
-4. Write integration test in `tests/integration/test_api_logs.py`
-
-### Tenant Isolation Rules — Never Violate These
-
-- Every `LogRepository` method takes `tenant_id: str` as first argument
-- `tenant_id` is **always** derived from `get_tenant_id()` security dependency
-- **Never** accept `tenant_id` as a query/body parameter from the client
-- Cross-tenant queries are architecturally prevented by the repository layer
-
-### Unit Conversion Conventions
-
-| Source | Field | Unit in API | Conversion |
-|---|---|---|---|
-| Open Food Facts | `sodium_100g` | grams | multiply × 1000 → mg |
-| Open Food Facts | `energy-kcal_100g` | kcal | no conversion |
-| USDA | `sodium` (nutrient 1093) | mg | no conversion |
-| All sources | Macros | per 100g | scaled by `quantity_g / 100` in `scaled_macros` |
-| All liquids | Volume | ml | `volume_ml_per_100g * (quantity_g / 100)` |
-
-### Common Pitfalls
-
-```python
-# ❌ WRONG: Importing adapter in service
-from app.adapters.open_food_facts import OpenFoodFactsAdapter  # Never in services/
-
-# ✅ CORRECT: Depend on the port interface only
-from app.domain.ports import ProductSourcePort
-
-# ❌ WRONG: Using float for nutritional values
-calories: float = 42.0
-
-# ✅ CORRECT: Always use Decimal for financial/nutritional precision
-from decimal import Decimal
-calories: Decimal = Decimal("42.0")
-
-# ❌ WRONG: Directly accessing repository in router
-from app.repositories.log_repository import InMemoryLogRepository  # Never in API layer
-
-# ✅ CORRECT: Always go through the service
-from app.services.log_service import LogService
-```
-
-### Replacing the In-Memory Repository
-
-The `InMemoryLogRepository` is a placeholder. To switch to a real database:
-
-1. Create `src/app/repositories/postgres_log_repository.py`
-2. Implement the same public interface (same method signatures as `InMemoryLogRepository`)
-3. Update `get_log_repository()` in `dependencies.py`
-4. No changes needed in `LogService` — it's fully decoupled
-
-```python
-# The interface contract (implicit — no ABC currently, but these are the required methods):
-def save(self, entry: LogEntry) -> LogEntry: ...
-def find_by_id(self, tenant_id: str, entry_id: str) -> LogEntry | None: ...
-def find_by_date(self, tenant_id: str, log_date: date) -> list[LogEntry]: ...
-def delete(self, tenant_id: str, entry_id: str) -> bool: ...
-def update(self, entry: LogEntry) -> LogEntry: ...
-```
-
-### Environment for Local Development
-
-```bash
-# Minimum viable .env for local dev
-API_KEYS={"dev-key":"tenant_dev"}
-USDA_API_KEY=DEMO_KEY      # 1000 req/hour limit — sufficient for dev
-DEBUG=true
-```
+1. `AGENTS.md` — contributor rules
+2. `src/app/domain/models.py` — all data shapes
+3. `src/app/domain/ports.py` — adapter interface contract
+4. `src/app/api/dependencies.py` — DI wiring
+5. `src/app/core/config.py` — all config values
 
 ---
 
@@ -710,42 +618,48 @@ DEBUG=true
 
 ### ADR-001: Static API Keys over JWT
 
-**Decision:** Use static `X-API-Key` header auth instead of JWT/OAuth2.
-**Rationale:** Homelab context — no auth server available. Static keys provide sufficient security for a single-user or family deployment. Replace with OAuth2 + Keycloak for enterprise use.
-**Consequence:** Key rotation requires a config update and pod restart.
+**Decision:** `X-API-Key` header auth instead of JWT/OAuth2.
+**Rationale:** Homelab context — no auth server. Sufficient for single-user/family deployment.
+**Consequence:** Key rotation requires config update and pod restart.
 
-### ADR-002: Decimal over float for nutritional values
+### ADR-002: Decimal over float
 
 **Decision:** All nutritional values use `decimal.Decimal`.
-**Rationale:** Floating-point arithmetic accumulates errors over many log entries. Daily totals must be precise. `Decimal("0.1") + Decimal("0.2") == Decimal("0.3")` is true; the float equivalent is false.
+**Rationale:** Float arithmetic accumulates errors. `Decimal("0.1") + Decimal("0.2") == Decimal("0.3")` is true; the float equivalent is false.
 
 ### ADR-003: In-Memory Repository as default
 
-**Decision:** Ship with `InMemoryLogRepository` as the default, designed for easy replacement.
-**Rationale:** Minimizes external dependencies for homelab/single-node deployments. The repository interface is stable — replacing the implementation is a one-file change.
+**Decision:** Ship with `InMemoryLogRepository`, designed for easy replacement.
+**Rationale:** Zero external dependencies for homelab. Interface is stable — swap to SQLite/Postgres in one file.
 
 ### ADR-004: Embedded product snapshot in LogEntry
 
-**Decision:** `LogEntry` stores a full `GeneralizedProduct` snapshot, not just a product ID reference.
-**Rationale:** External product data changes over time (OFF community edits, USDA corrections). Historical log accuracy requires capturing the nutritional values at the time of logging.
+**Decision:** `LogEntry` stores a full `GeneralizedProduct` snapshot.
+**Rationale:** External product data changes over time. Historical accuracy requires capturing values at logging time.
 
-### ADR-005: is_liquid flag over category hierarchy
+### ADR-005: is_liquid flag
 
-**Decision:** A simple `is_liquid: bool` flag drives hydration tracking rather than food category hierarchies.
-**Rationale:** Keeps the domain model simple. Heuristic detection in adapters (PNNS groups for OFF, food category for USDA) covers 95% of cases. Edge cases can be overridden manually.
+**Decision:** Simple `is_liquid: bool` flag instead of category hierarchy.
+**Rationale:** Covers 95% of cases with minimal complexity. Edge cases handled by adapter heuristics.
+
+### ADR-006: FluxCD over push-based deploy
+
+**Decision:** FluxCD polls ghcr.io instead of GitHub Actions pushing to the cluster.
+**Rationale:** Homelab k3s cluster is not externally reachable. Pull-based GitOps fits the network topology.
 
 ---
 
 ## 🗺 Roadmap
 
 - [ ] **Persistent storage:** SQLite via SQLAlchemy (single-file, zero-ops for homelab)
-- [ ] **Product caching:** Redis or in-memory TTL cache to avoid redundant external API calls
+- [ ] **Product caching:** In-memory TTL cache to avoid redundant external API calls
 - [ ] **Search endpoint:** `GET /api/v1/products/search?q=banana&source=open_food_facts`
 - [ ] **Weekly/monthly aggregation:** Trend endpoints for nutrition over time
 - [ ] **Manual product entry:** `POST /api/v1/products` with `source: manual`
 - [ ] **Export:** `GET /api/v1/logs/export?format=csv&from=...&to=...`
 - [ ] **Goals tracking:** Daily targets for calories, protein, water intake
-- [ ] **Formal Repository ABC:** Introduce `AbstractLogRepository` to make the interface contract explicit
+- [ ] **Formal Repository ABC:** Introduce `AbstractLogRepository` for explicit interface contract
+- [ ] **Pre-commit config:** Add `mypy` to pre-commit hooks
 
 ---
 
