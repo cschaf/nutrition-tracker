@@ -546,13 +546,55 @@ git tag v1.2.0 && git push --tags
                     kubectl rollout (automatic)
 ```
 
-### Release
+### Release — How to Trigger the CD Pipeline
 
-```bash
-git tag v1.2.0
-git push --tags
-# Done — CI builds and pushes, FluxCD deploys
+The CD workflow is **only triggered by a Git tag** matching `v*.*.*`. A regular `git push` to `main` never triggers it.
+
+**Required flow — do not skip steps:**
+
+```powershell
+# Step 1: Make sure everything is committed and pushed
+git status
+git push origin main
+
+# Step 2: Wait for CI (ci.yml) to go green on GitHub Actions
+# → github.com/your-username/nutrition-tracker/actions
+# Never tag a commit that has failing CI
+
+# Step 3: Create and push the tag — this triggers cd.yml
+git tag v1.0.0
+git push origin v1.0.0
 ```
+
+After `git push origin v1.0.0` the CD workflow appears under GitHub Actions within seconds.
+
+**If you need to redo a tag:**
+
+```powershell
+# Delete locally
+git tag -d v1.0.0
+
+# Delete on remote
+git push origin --delete v1.0.0
+
+# Re-create and push
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+**List all existing tags:**
+
+```powershell
+git tag -l
+```
+
+**Versioning convention:** follow [Semantic Versioning](https://semver.org).
+
+| Change type | Example |
+|---|---|
+| Bug fix | `v1.0.1` |
+| New feature (backwards compatible) | `v1.1.0` |
+| Breaking change | `v2.0.0` |
 
 ### GitHub Repository Settings Required
 
