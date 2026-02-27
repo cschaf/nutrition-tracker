@@ -1,12 +1,17 @@
 # src/app/services/log_service.py
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from decimal import Decimal
 
 from app.domain.models import (
-    DataSource, DailyHydrationSummary, DailyNutritionSummary,
-    LogEntry, LogEntryCreate, LogEntryUpdate, Macronutrients,
+    DailyHydrationSummary,
+    DailyNutritionSummary,
+    DataSource,
+    LogEntry,
+    LogEntryCreate,
+    LogEntryUpdate,
+    Macronutrients,
 )
 from app.domain.ports import ProductSourcePort
 from app.repositories.log_repository import InMemoryLogRepository
@@ -29,7 +34,7 @@ class LogService:
             tenant_id=tenant_id,
             product=product,
             quantity_g=payload.quantity_g,
-            log_date=payload.log_date or datetime.now(timezone.utc).date(),
+            log_date=payload.log_date or datetime.now(UTC).date(),
             note=payload.note,
         )
         return self._repo.save(entry)
@@ -46,9 +51,9 @@ class LogService:
         entry = self._repo.find_by_id(tenant_id, entry_id)
         if not entry:
             return None
-        updated = entry.model_copy(update={
-            k: v for k, v in payload.model_dump(exclude_none=True).items()
-        })
+        updated = entry.model_copy(
+            update={k: v for k, v in payload.model_dump(exclude_none=True).items()}
+        )
         return self._repo.update(updated)
 
     def delete_entry(self, tenant_id: str, entry_id: str) -> bool:
@@ -73,9 +78,7 @@ class LogService:
             fiber_g=_sum_field("fiber_g"),
             sugar_g=_sum_field("sugar_g"),
         )
-        return DailyNutritionSummary(
-            log_date=log_date, total_entries=len(entries), totals=totals
-        )
+        return DailyNutritionSummary(log_date=log_date, total_entries=len(entries), totals=totals)
 
     def get_daily_hydration(self, tenant_id: str, log_date: date) -> DailyHydrationSummary:
         entries = self._repo.find_by_date(tenant_id, log_date)

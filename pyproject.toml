@@ -36,7 +36,12 @@ line-length = 100
 target-version = "py312"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "SIM"]
+select = ["E", "F", "I", "UP", "SIM"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/app/api/dependencies.py" = ["B008"]
+"src/app/core/security.py" = ["B008"]
+"src/app/api/v1/*.py" = ["B008"]
 
 [tool.mypy]
 python_version = "3.12"

@@ -10,8 +10,8 @@ from app.adapters.usda_fooddata import UsdaFoodDataAdapter
 from app.core.config import Settings, get_settings
 from app.domain.models import DataSource
 from app.domain.ports import ProductSourcePort
-from app.services.log_service import LogService
 from app.repositories.log_repository import InMemoryLogRepository
+from app.services.log_service import LogService
 
 
 # Shared HTTP Client (Connection Pooling)

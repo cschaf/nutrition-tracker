@@ -1,5 +1,6 @@
 # src/app/domain/ports.py
 from abc import ABC, abstractmethod
+
 from app.domain.models import GeneralizedProduct
 
 
@@ -31,6 +32,7 @@ class ProductSourcePort(ABC):
 # ---------------------------------------------------------------------------
 # Custom Domain Exceptions
 # ---------------------------------------------------------------------------
+
 
 class ProductNotFoundError(Exception):
     def __init__(self, product_id: str, source: str):

@@ -23,8 +23,10 @@ _BASE_URL = "https://world.openfoodfacts.org"
 # Interne Rohdaten-Schemas (für typisiertes Parsing der OFF-Response)
 # ---------------------------------------------------------------------------
 
+
 class _OffNutriments(BaseModel):
     """Direkte Abbildung relevanter OFF-Felder. Alle optional, da OFF-Daten inkonsistent sind."""
+
     energy_kcal_100g: float | None = Field(default=None, alias="energy-kcal_100g")
     proteins_100g: float | None = None
     carbohydrates_100g: float | None = None
@@ -167,8 +169,6 @@ class OpenFoodFactsAdapter(ProductSourcePort):
 
     @staticmethod
     def _detect_liquid(raw: _OffProduct) -> bool:
-        if raw.pnns_groups_1 in _LIQUID_PNNS_GROUPS:
-            return True
-        if raw.product_type and raw.product_type.lower() in _LIQUID_PRODUCT_TYPES:
-            return True
-        return False
+        return raw.pnns_groups_1 in _LIQUID_PNNS_GROUPS or bool(
+            raw.product_type and raw.product_type.lower() in _LIQUID_PRODUCT_TYPES
+        )

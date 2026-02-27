@@ -1,5 +1,5 @@
 # src/app/api/v1/logs.py
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Security, status
@@ -7,8 +7,11 @@ from fastapi import APIRouter, Depends, HTTPException, Security, status
 from app.api.dependencies import get_log_service
 from app.core.security import get_tenant_id
 from app.domain.models import (
-    DailyHydrationSummary, DailyNutritionSummary,
-    LogEntry, LogEntryCreate, LogEntryUpdate,
+    DailyHydrationSummary,
+    DailyNutritionSummary,
+    LogEntry,
+    LogEntryCreate,
+    LogEntryUpdate,
 )
 from app.services.log_service import LogService
 
@@ -33,7 +36,7 @@ def get_daily_log(
     tenant_id: TenantDep = "",
     service: ServiceDep = None,
 ) -> list[LogEntry]:
-    target = log_date or datetime.now(timezone.utc).date()
+    target = log_date or datetime.now(UTC).date()
     return service.get_entries_for_date(tenant_id=tenant_id, log_date=target)
 
 
@@ -70,7 +73,7 @@ def get_daily_nutrition(
     tenant_id: TenantDep = "",
     service: ServiceDep = None,
 ) -> DailyNutritionSummary:
-    target = log_date or datetime.now(timezone.utc).date()
+    target = log_date or datetime.now(UTC).date()
     return service.get_daily_nutrition(tenant_id=tenant_id, log_date=target)
 
 
@@ -80,5 +83,5 @@ def get_daily_hydration(
     tenant_id: TenantDep = "",
     service: ServiceDep = None,
 ) -> DailyHydrationSummary:
-    target = log_date or datetime.now(timezone.utc).date()
+    target = log_date or datetime.now(UTC).date()
     return service.get_daily_hydration(tenant_id=tenant_id, log_date=target)
