@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from app.domain.models import DataSource, GeneralizedProduct, Macronutrients, Micronutrients
 from app.main import app
 
+
 @pytest.fixture
 def mock_generalized_product():
     return GeneralizedProduct(
@@ -26,9 +27,13 @@ def mock_generalized_product():
         is_liquid=False
     )
 
-def test_create_log_entry_success(client: TestClient, mock_generalized_product: GeneralizedProduct):
+def test_create_log_entry_success(
+    client: TestClient, mock_generalized_product: GeneralizedProduct
+):
     # Mock den Service-Aufruf
-    with patch("app.services.log_service.LogService.create_entry", new_callable=AsyncMock) as mock_create:
+    with patch(
+        "app.services.log_service.LogService.create_entry", new_callable=AsyncMock
+    ) as mock_create:
         mock_create.return_value = {
             "id": "new-log-id",
             "tenant_id": "tenant_alice",
