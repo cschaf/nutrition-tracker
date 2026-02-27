@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     app_name: str = "Nutrition Tracker API"
     app_version: str = "1.0.0"
     debug: bool = False
+    database_url: str = "sqlite+aiosqlite:///./nutrition_tracker.db"
 
     # API Keys: Mapping von API-Key zu Tenant-ID (JSON-String als Env-Var)
     # Format: '{"key_abc123": "tenant_alice", "key_xyz789": "tenant_bob"}'

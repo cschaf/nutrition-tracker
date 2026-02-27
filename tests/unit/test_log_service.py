@@ -46,7 +46,7 @@ async def test_daily_hydration_only_counts_liquids():
     )
     await service.create_entry("tenant_alice", payload)
 
-    summary = service.get_daily_hydration("tenant_alice", date.today())
+    summary = await service.get_daily_hydration("tenant_alice", date.today())
     assert summary.total_volume_ml == Decimal("250.0")
     assert summary.contributing_entries == 1
 
@@ -67,5 +67,5 @@ async def test_tenant_isolation():
     await service.create_entry("tenant_alice", payload)
 
     # Bob sieht Alices Daten nicht
-    bob_entries = service.get_entries_for_date("tenant_bob", date.today())
+    bob_entries = await service.get_entries_for_date("tenant_bob", date.today())
     assert len(bob_entries) == 0

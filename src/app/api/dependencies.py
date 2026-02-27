@@ -10,7 +10,8 @@ from app.adapters.usda_fooddata import UsdaFoodDataAdapter
 from app.core.config import Settings, get_settings
 from app.domain.models import DataSource
 from app.domain.ports import ProductSourcePort
-from app.repositories.log_repository import InMemoryLogRepository
+from app.repositories.base import AbstractLogRepository
+from app.repositories.sqlite_log_repository import SQLiteLogRepository
 from app.services.log_service import LogService
 
 
@@ -47,17 +48,24 @@ def get_adapter_registry(
     }
 
 
-# Singleton Repository (für Homelab: In-Memory; austauschbar gegen DB-Implementierung)
-_repository = InMemoryLogRepository()
+# Singleton Repository (Initialisiert beim ersten Zugriff)
+_repository: AbstractLogRepository | None = None
 
 
-def get_log_repository() -> InMemoryLogRepository:
+async def get_log_repository(
+    settings: Settings = Depends(get_settings),
+) -> AbstractLogRepository:
+    global _repository
+    if _repository is None:
+        repo = SQLiteLogRepository(database_url=settings.database_url)
+        await repo.initialize()
+        _repository = repo
     return _repository
 
 
 def get_log_service(
     adapter_registry: dict[DataSource, ProductSourcePort] = Depends(get_adapter_registry),
-    repository: InMemoryLogRepository = Depends(get_log_repository),
+    repository: AbstractLogRepository = Depends(get_log_repository),
 ) -> LogService:
     return LogService(adapter_registry=adapter_registry, repository=repository)
 

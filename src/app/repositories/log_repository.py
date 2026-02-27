@@ -5,9 +5,10 @@ from collections import defaultdict
 from datetime import date
 
 from app.domain.models import LogEntry
+from app.repositories.base import AbstractLogRepository
 
 
-class InMemoryLogRepository:
+class InMemoryLogRepository(AbstractLogRepository):
     """
     In-Memory Repository für den Homelab-Einsatz.
     Interface kann gegen SQLAlchemy/Motor-Implementierung ausgetauscht werden.
@@ -17,22 +18,22 @@ class InMemoryLogRepository:
         # Struktur: {tenant_id: {log_id: LogEntry}}
         self._store: dict[str, dict[str, LogEntry]] = defaultdict(dict)
 
-    def save(self, entry: LogEntry) -> LogEntry:
+    async def save(self, entry: LogEntry) -> LogEntry:
         self._store[entry.tenant_id][entry.id] = entry
         return entry
 
-    def find_by_id(self, tenant_id: str, entry_id: str) -> LogEntry | None:
+    async def find_by_id(self, tenant_id: str, entry_id: str) -> LogEntry | None:
         return self._store[tenant_id].get(entry_id)
 
-    def find_by_date(self, tenant_id: str, log_date: date) -> list[LogEntry]:
+    async def find_by_date(self, tenant_id: str, log_date: date) -> list[LogEntry]:
         return [
             e for e in self._store[tenant_id].values()
             if e.log_date == log_date
         ]
 
-    def delete(self, tenant_id: str, entry_id: str) -> bool:
+    async def delete(self, tenant_id: str, entry_id: str) -> bool:
         return self._store[tenant_id].pop(entry_id, None) is not None
 
-    def update(self, entry: LogEntry) -> LogEntry:
+    async def update(self, entry: LogEntry) -> LogEntry:
         self._store[entry.tenant_id][entry.id] = entry
         return entry
