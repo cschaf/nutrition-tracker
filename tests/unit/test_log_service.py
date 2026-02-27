@@ -13,6 +13,7 @@ from app.domain.models import (
 )
 from app.repositories.log_repository import InMemoryLogRepository
 from app.services.log_service import LogService
+from app.services.product_cache import ProductCache
 
 
 def _make_product(is_liquid: bool = False) -> GeneralizedProduct:
@@ -37,8 +38,11 @@ async def test_daily_hydration_only_counts_liquids():
     mock_adapter.fetch_by_id.return_value = _make_product(is_liquid=True)
 
     repo = InMemoryLogRepository()
+    cache = ProductCache(ttl_seconds=60)
     service = LogService(
-        adapter_registry={DataSource.OPEN_FOOD_FACTS: mock_adapter}, repository=repo
+        adapter_registry={DataSource.OPEN_FOOD_FACTS: mock_adapter},
+        repository=repo,
+        product_cache=cache,
     )
 
     payload = LogEntryCreate(
@@ -57,8 +61,11 @@ async def test_tenant_isolation():
     mock_adapter.fetch_by_id.return_value = _make_product()
 
     repo = InMemoryLogRepository()
+    cache = ProductCache(ttl_seconds=60)
     service = LogService(
-        adapter_registry={DataSource.OPEN_FOOD_FACTS: mock_adapter}, repository=repo
+        adapter_registry={DataSource.OPEN_FOOD_FACTS: mock_adapter},
+        repository=repo,
+        product_cache=cache,
     )
 
     payload = LogEntryCreate(

@@ -13,6 +13,7 @@ from app.domain.ports import ProductSourcePort
 from app.repositories.base import AbstractLogRepository
 from app.repositories.sqlite_log_repository import SQLiteLogRepository
 from app.services.log_service import LogService
+from app.services.product_cache import ProductCache
 
 
 # Shared HTTP Client (Connection Pooling)
@@ -48,6 +49,19 @@ def get_adapter_registry(
     }
 
 
+# Singleton Product Cache
+_product_cache: ProductCache | None = None
+
+
+def get_product_cache(
+    settings: Settings = Depends(get_settings),
+) -> ProductCache:
+    global _product_cache
+    if _product_cache is None:
+        _product_cache = ProductCache(ttl_seconds=settings.cache_ttl_seconds)
+    return _product_cache
+
+
 # Singleton Repository (Initialisiert beim ersten Zugriff)
 _repository: AbstractLogRepository | None = None
 
@@ -66,8 +80,11 @@ async def get_log_repository(
 def get_log_service(
     adapter_registry: dict[DataSource, ProductSourcePort] = Depends(get_adapter_registry),
     repository: AbstractLogRepository = Depends(get_log_repository),
+    product_cache: ProductCache = Depends(get_product_cache),
 ) -> LogService:
-    return LogService(adapter_registry=adapter_registry, repository=repository)
+    return LogService(
+        adapter_registry=adapter_registry, repository=repository, product_cache=product_cache
+    )
 
 
 TenantIdDep = Annotated[str, Depends(get_settings)]  # wird in Endpoints via get_tenant_id genutzt

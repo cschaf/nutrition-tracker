@@ -15,6 +15,7 @@ from app.domain.models import (
 )
 from app.domain.ports import ProductSourcePort
 from app.repositories.base import AbstractLogRepository
+from app.services.product_cache import ProductCache
 
 
 class LogService:
@@ -22,13 +23,21 @@ class LogService:
         self,
         adapter_registry: dict[DataSource, ProductSourcePort],
         repository: AbstractLogRepository,
+        product_cache: ProductCache,
     ) -> None:
         self._adapters = adapter_registry
         self._repo = repository
+        self._cache = product_cache
 
     async def create_entry(self, tenant_id: str, payload: LogEntryCreate) -> LogEntry:
-        adapter = self._adapters[payload.source]
-        product = await adapter.fetch_by_id(payload.product_id)
+        # 1. Check cache
+        product = self._cache.get(payload.source, payload.product_id)
+
+        # 2. If miss, fetch from adapter and update cache
+        if product is None:
+            adapter = self._adapters[payload.source]
+            product = await adapter.fetch_by_id(payload.product_id)
+            self._cache.set(payload.source, payload.product_id, product)
 
         entry = LogEntry(
             tenant_id=tenant_id,
