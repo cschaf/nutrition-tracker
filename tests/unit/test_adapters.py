@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
+
 from app.adapters.open_food_facts import OpenFoodFactsAdapter
 from app.domain.models import DataSource
 from app.domain.ports import ProductNotFoundError
