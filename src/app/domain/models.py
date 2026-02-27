@@ -2,19 +2,18 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from decimal import Decimal
-from enum import Enum
-from typing import Annotated
+from enum import StrEnum
 
 from pydantic import BaseModel, Field, field_validator
-
 
 # ---------------------------------------------------------------------------
 # Value Objects
 # ---------------------------------------------------------------------------
 
-class DataSource(str, Enum):
+
+class DataSource(str, StrEnum):
     OPEN_FOOD_FACTS = "open_food_facts"
     USDA_FOODDATA = "usda_fooddata"
     MANUAL = "manual"
@@ -47,11 +46,13 @@ class Micronutrients(BaseModel):
 # Kernkonzept: Source-agnostisches, normalisiertes Produktmodell.
 # ---------------------------------------------------------------------------
 
+
 class GeneralizedProduct(BaseModel):
     """
     Einheitliches internes Produktmodell.
     Die Core-Domain ist vollständig von der Datenquelle entkoppelt.
     """
+
     id: str = Field(description="Source-spezifischer Identifier (z.B. Barcode oder USDA fdcId)")
     source: DataSource
     name: str = Field(min_length=1, max_length=512)
@@ -67,7 +68,7 @@ class GeneralizedProduct(BaseModel):
     volume_ml_per_100g: Decimal | None = Field(
         default=None,
         ge=0,
-        description="Für Flüssigkeiten: Milliliter pro 100g (oft 100ml/100g = 1:1)"
+        description="Für Flüssigkeiten: Milliliter pro 100g (oft 100ml/100g = 1:1)",
     )
 
     @field_validator("volume_ml_per_100g", mode="after")
@@ -86,6 +87,7 @@ class GeneralizedProduct(BaseModel):
 # Aggregate: LogEntry
 # ---------------------------------------------------------------------------
 
+
 class LogEntryId(str):
     """Typisierter Wrapper für LogEntry-IDs."""
 
@@ -93,13 +95,12 @@ class LogEntryId(str):
 class LogEntry(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     tenant_id: str = Field(description="Aus dem API-Key abgeleitete Tenant-ID")
-    log_date: date = Field(default_factory=lambda: datetime.now(timezone.utc).date())
+    log_date: date = Field(default_factory=lambda: datetime.now(UTC).date())
     product: GeneralizedProduct
     quantity_g: Decimal = Field(
-        gt=0,
-        description="Konsumierte Menge in Gramm (auch für Flüssigkeiten als Referenzgewicht)"
+        gt=0, description="Konsumierte Menge in Gramm (auch für Flüssigkeiten als Referenzgewicht)"
     )
-    consumed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    consumed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     note: str | None = Field(default=None, max_length=1024)
 
     @property
@@ -128,6 +129,7 @@ class LogEntry(BaseModel):
 # ---------------------------------------------------------------------------
 # API Request/Response Schemas
 # ---------------------------------------------------------------------------
+
 
 class LogEntryCreate(BaseModel):
     product_id: str = Field(description="Produkt-ID aus der externen Quelle")
