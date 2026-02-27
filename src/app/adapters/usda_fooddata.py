@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 _BASE_URL = "https://api.nal.usda.gov/fdc/v1"
 
 # USDA Nutrient Number Mapping
-_NUTRIENT_MAP = {
+_NUTRIENT_MAP: dict[str, dict[str, set[int] | Decimal]] = {
     "calories":      {"ids": {1008}, "unit_factor": Decimal("1")},
     "protein":       {"ids": {1003}, "unit_factor": Decimal("1")},
     "carbohydrates": {"ids": {1005}, "unit_factor": Decimal("1")},
@@ -67,9 +67,10 @@ class UsdaFoodDataAdapter(ProductSourcePort):
 
     async def fetch_by_id(self, product_id: str) -> GeneralizedProduct:
         url = f"{_BASE_URL}/food/{product_id}"
+        params: dict[str, str | int] = {"api_key": self._api_key}
         try:
             response = await self._client.get(
-                url, params={"api_key": self._api_key}, timeout=10.0
+                url, params=params, timeout=10.0
             )
             if response.status_code == 404:
                 raise ProductNotFoundError(product_id, "usda_fooddata")
@@ -84,14 +85,17 @@ class UsdaFoodDataAdapter(ProductSourcePort):
 
     async def search(self, query: str, limit: int = 10) -> list[GeneralizedProduct]:
         url = f"{_BASE_URL}/foods/search"
-        params = {"api_key": self._api_key, "query": query, "pageSize": limit}
+        params: dict[str, str | int] = {"api_key": self._api_key, "query": query, "pageSize": limit}
         try:
             response = await self._client.get(url, params=params, timeout=15.0)
             response.raise_for_status()
         except (httpx.HTTPStatusError, httpx.RequestError) as e:
             raise ExternalApiError("usda_fooddata", str(e)) from e
 
-        foods = response.json().get("foods", [])
+        data = response.json()
+        foods = data.get("foods", [])
+        if not isinstance(foods, list):
+            return []
         result = []
         for food_data in foods:
             try:
@@ -140,6 +144,7 @@ class UsdaFoodDataAdapter(ProductSourcePort):
         nutrient_id_to_key = {
             nid: key
             for key, meta in _NUTRIENT_MAP.items()
+            if isinstance(meta["ids"], set)
             for nid in meta["ids"]
         }
         for fn in food_nutrients:

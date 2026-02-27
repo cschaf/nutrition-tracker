@@ -102,7 +102,7 @@ class OpenFoodFactsAdapter(ProductSourcePort):
 
     async def search(self, query: str, limit: int = 10) -> list[GeneralizedProduct]:
         url = f"{_BASE_URL}/cgi/search.pl"
-        params = {
+        params: dict[str, str | int] = {
             "search_terms": query,
             "search_simple": 1,
             "action": "process",

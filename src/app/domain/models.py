@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field, field_validator
 # ---------------------------------------------------------------------------
 
 
-class DataSource(str, StrEnum):
+class DataSource(StrEnum):
     OPEN_FOOD_FACTS = "open_food_facts"
     USDA_FOODDATA = "usda_fooddata"
     MANUAL = "manual"

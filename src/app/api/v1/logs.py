@@ -32,9 +32,9 @@ async def create_log_entry(
 
 @router.get("/daily", response_model=list[LogEntry])
 def get_daily_log(
+    service: ServiceDep,
     log_date: date | None = None,
     tenant_id: TenantDep = "",
-    service: ServiceDep = None,
 ) -> list[LogEntry]:
     target = log_date or datetime.now(UTC).date()
     return service.get_entries_for_date(tenant_id=tenant_id, log_date=target)
@@ -69,9 +69,9 @@ def delete_log_entry(entry_id: str, tenant_id: TenantDep, service: ServiceDep) -
 
 @router.get("/daily/nutrition", response_model=DailyNutritionSummary)
 def get_daily_nutrition(
+    service: ServiceDep,
     log_date: date | None = None,
     tenant_id: TenantDep = "",
-    service: ServiceDep = None,
 ) -> DailyNutritionSummary:
     target = log_date or datetime.now(UTC).date()
     return service.get_daily_nutrition(tenant_id=tenant_id, log_date=target)
@@ -79,9 +79,9 @@ def get_daily_nutrition(
 
 @router.get("/daily/hydration", response_model=DailyHydrationSummary)
 def get_daily_hydration(
+    service: ServiceDep,
     log_date: date | None = None,
     tenant_id: TenantDep = "",
-    service: ServiceDep = None,
 ) -> DailyHydrationSummary:
     target = log_date or datetime.now(UTC).date()
     return service.get_daily_hydration(tenant_id=tenant_id, log_date=target)
