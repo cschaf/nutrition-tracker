@@ -1,0 +1,1 @@
+# Placeholder — Product search endpoints (see Roadmap)

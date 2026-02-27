@@ -1,0 +1,10 @@
+# .dockerignore
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+tests/
+.env
+.git/
+deploy/
+*.md

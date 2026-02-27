@@ -1,0 +1,16 @@
+# deploy/charts/nutrition-tracker/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "nutrition-tracker.fullname" . }}
+  labels:
+    {{- include "nutrition-tracker.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: {{ .Values.service.targetPort }}
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "nutrition-tracker.selectorLabels" . | nindent 4 }}

@@ -1,0 +1,78 @@
+# deploy/charts/nutrition-tracker/values.yaml
+replicaCount: 2
+
+image:
+  repository: ghcr.io/your-org/nutrition-tracker
+  pullPolicy: IfNotPresent
+  tag: ""  # Wird im CI durch Chart.appVersion oder --set überschrieben
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8000
+
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+  hosts:
+    - host: nutrition.homelab.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: nutrition-tracker-tls
+      hosts:
+        - nutrition.homelab.local
+
+resources:
+  requests:
+    cpu: "100m"
+    memory: "128Mi"
+  limits:
+    cpu: "500m"
+    memory: "256Mi"
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 70
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: 8000
+  initialDelaySeconds: 10
+  periodSeconds: 15
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /readyz
+    port: 8000
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  failureThreshold: 3
+
+env:
+  DEBUG: "false"
+  CORS_ORIGINS: '["https://nutrition.homelab.local"]'
+  RATE_LIMIT_REQUESTS: "100"
+
+# Secrets werden via External Secrets Operator oder manuell befüllt
+secrets:
+  apiKeys: ""      # JSON: '{"key_abc": "tenant_alice"}'
+  usdaApiKey: ""
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1001
+  fsGroup: 1001
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]

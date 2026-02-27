@@ -1,0 +1,7 @@
+# deploy/charts/nutrition-tracker/Chart.yaml
+apiVersion: v2
+name: nutrition-tracker
+description: Cloud-native Nutrition & Hydration Tracking API
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

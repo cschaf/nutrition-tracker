@@ -1,0 +1,11 @@
+# deploy/charts/nutrition-tracker/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "nutrition-tracker.fullname" . }}-config
+  labels:
+    {{- include "nutrition-tracker.labels" . | nindent 4 }}
+data:
+  DEBUG: {{ .Values.env.DEBUG | quote }}
+  CORS_ORIGINS: {{ .Values.env.CORS_ORIGINS | quote }}
+  RATE_LIMIT_REQUESTS: {{ .Values.env.RATE_LIMIT_REQUESTS | quote }}
