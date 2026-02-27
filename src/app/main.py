@@ -37,7 +37,7 @@ app = FastAPI(
 
 # Rate Limiting
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]
 
 # CORS
 app.add_middleware(
@@ -51,10 +51,10 @@ app.include_router(api_router)
 
 
 @app.get("/healthz", tags=["Health"])
-async def health_check() -> dict:
+async def health_check() -> dict[str, str]:
     return {"status": "ok", "version": settings.app_version}
 
 
 @app.get("/readyz", tags=["Health"])
-async def readiness_check() -> dict:
+async def readiness_check() -> dict[str, str]:
     return {"status": "ready"}
