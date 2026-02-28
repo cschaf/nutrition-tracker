@@ -158,6 +158,36 @@ class DailyHydrationSummary(BaseModel):
     contributing_entries: int
 
 
+class DailyGoals(BaseModel):
+    calories_kcal: Decimal | None = None
+    protein_g: Decimal | None = None
+    carbohydrates_g: Decimal | None = None
+    fat_g: Decimal | None = None
+    water_ml: Decimal | None = None
+
+    model_config = {"frozen": True}
+
+
+class GoalProgress(BaseModel):
+    target: Decimal
+    actual: Decimal
+    remaining: Decimal
+    percent_achieved: Decimal
+
+    model_config = {"frozen": True}
+
+
+class DailyGoalsProgress(BaseModel):
+    log_date: date
+    calories: GoalProgress | None = None
+    protein: GoalProgress | None = None
+    carbohydrates: GoalProgress | None = None
+    fat: GoalProgress | None = None
+    water: GoalProgress | None = None
+
+    model_config = {"frozen": True}
+
+
 class ManualProductCreate(BaseModel):
     name: str = Field(min_length=1, max_length=512)
     brand: str | None = None

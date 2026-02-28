@@ -12,9 +12,11 @@ from app.core.config import Settings, get_settings
 from app.domain.models import DataSource
 from app.domain.ports import ProductSourcePort
 from app.repositories.base import AbstractLogRepository
+from app.repositories.goals_repository import GoalsRepository
 from app.repositories.manual_product_repository import ManualProductRepository
 from app.repositories.sqlite_log_repository import SQLiteLogRepository
 from app.services.export_service import ExportService
+from app.services.goals_service import GoalsService
 from app.services.log_service import LogService
 from app.services.product_cache import ProductCache
 from app.services.product_service import ProductService
@@ -114,6 +116,18 @@ def get_log_service(
     return LogService(
         adapter_registry=adapter_registry, repository=repository, product_cache=product_cache
     )
+
+
+@lru_cache
+def get_goals_repository() -> GoalsRepository:
+    return GoalsRepository()
+
+
+def get_goals_service(
+    repository: GoalsRepository = Depends(get_goals_repository),
+    log_service: LogService = Depends(get_log_service),
+) -> GoalsService:
+    return GoalsService(repository=repository, log_service=log_service)
 
 
 def get_export_service() -> ExportService:
