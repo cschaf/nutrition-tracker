@@ -14,6 +14,7 @@ from app.domain.ports import ProductSourcePort
 from app.repositories.base import AbstractLogRepository
 from app.repositories.manual_product_repository import ManualProductRepository
 from app.repositories.sqlite_log_repository import SQLiteLogRepository
+from app.services.export_service import ExportService
 from app.services.log_service import LogService
 from app.services.product_cache import ProductCache
 from app.services.product_service import ProductService
@@ -113,6 +114,10 @@ def get_log_service(
     return LogService(
         adapter_registry=adapter_registry, repository=repository, product_cache=product_cache
     )
+
+
+def get_export_service() -> ExportService:
+    return ExportService()
 
 
 TenantIdDep = Annotated[str, Depends(get_settings)]  # wird in Endpoints via get_tenant_id genutzt
