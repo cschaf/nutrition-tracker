@@ -138,3 +138,191 @@ def test_get_range_validation_error(client: TestClient):
         assert response.status_code == 400
     finally:
         app.dependency_overrides.clear()
+
+
+def test_get_log_entry_not_found(client: TestClient):
+    from app.core.security import get_tenant_id
+
+    app.dependency_overrides[get_tenant_id] = lambda: "tenant_alice"
+    try:
+        response = client.get(
+            "/api/v1/logs/00000000-0000-0000-0000-000000000000",
+            headers={"X-API-Key": "any"},
+        )
+        assert response.status_code == 404
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_get_log_entry_success(client: TestClient):
+    from app.core.security import get_tenant_id
+
+    with patch(
+        "app.services.log_service.LogService.get_entry", new_callable=AsyncMock
+    ) as mock_get:
+        mock_get.return_value = None  # start as not found
+
+        app.dependency_overrides[get_tenant_id] = lambda: "tenant_alice"
+        try:
+            response = client.get(
+                "/api/v1/logs/00000000-0000-0000-0000-000000000001",
+                headers={"X-API-Key": "any"},
+            )
+            assert response.status_code == 404
+        finally:
+            app.dependency_overrides.clear()
+
+
+def test_update_log_entry_not_found(client: TestClient):
+    from app.core.security import get_tenant_id
+
+    app.dependency_overrides[get_tenant_id] = lambda: "tenant_alice"
+    try:
+        response = client.patch(
+            "/api/v1/logs/00000000-0000-0000-0000-000000000000",
+            json={"quantity_g": "150"},
+            headers={"X-API-Key": "any"},
+        )
+        assert response.status_code == 404
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_update_log_entry_success(
+    client: TestClient, mock_generalized_product: GeneralizedProduct
+):
+    from app.core.security import get_tenant_id
+
+    updated_entry = {
+        "id": "entry-id-1",
+        "tenant_id": "tenant_alice",
+        "log_date": "2025-01-15",
+        "product": mock_generalized_product,
+        "quantity_g": Decimal("200"),
+        "consumed_at": "2025-01-15T12:00:00Z",
+        "note": None,
+    }
+
+    with patch(
+        "app.services.log_service.LogService.update_entry", new_callable=AsyncMock
+    ) as mock_update:
+        mock_update.return_value = updated_entry
+
+        app.dependency_overrides[get_tenant_id] = lambda: "tenant_alice"
+        try:
+            response = client.patch(
+                "/api/v1/logs/entry-id-1",
+                json={"quantity_g": "200"},
+                headers={"X-API-Key": "any"},
+            )
+            assert response.status_code == 200
+            data = response.json()
+            assert data["id"] == "entry-id-1"
+        finally:
+            app.dependency_overrides.clear()
+
+
+def test_delete_log_entry_not_found(client: TestClient):
+    from app.core.security import get_tenant_id
+
+    app.dependency_overrides[get_tenant_id] = lambda: "tenant_alice"
+    try:
+        response = client.delete(
+            "/api/v1/logs/00000000-0000-0000-0000-000000000000",
+            headers={"X-API-Key": "any"},
+        )
+        assert response.status_code == 404
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_delete_log_entry_success(client: TestClient):
+    from app.core.security import get_tenant_id
+
+    with patch(
+        "app.services.log_service.LogService.delete_entry", new_callable=AsyncMock
+    ) as mock_delete:
+        mock_delete.return_value = True
+
+        app.dependency_overrides[get_tenant_id] = lambda: "tenant_alice"
+        try:
+            response = client.delete(
+                "/api/v1/logs/some-valid-entry-id",
+                headers={"X-API-Key": "any"},
+            )
+            assert response.status_code == 204
+        finally:
+            app.dependency_overrides.clear()
+
+
+def test_get_daily_nutrition_empty(client: TestClient):
+    from app.core.security import get_tenant_id
+
+    app.dependency_overrides[get_tenant_id] = lambda: "tenant_alice"
+    try:
+        response = client.get("/api/v1/logs/daily/nutrition", headers={"X-API-Key": "any"})
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total_entries"] == 0
+        assert Decimal(data["totals"]["calories_kcal"]) == Decimal("0")
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_get_daily_hydration_empty(client: TestClient):
+    from app.core.security import get_tenant_id
+
+    app.dependency_overrides[get_tenant_id] = lambda: "tenant_alice"
+    try:
+        response = client.get("/api/v1/logs/daily/hydration", headers={"X-API-Key": "any"})
+        assert response.status_code == 200
+        data = response.json()
+        assert Decimal(data["total_volume_ml"]) == Decimal("0")
+        assert data["contributing_entries"] == 0
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_get_hydration_range_success(client: TestClient):
+    from app.core.security import get_tenant_id
+
+    app.dependency_overrides[get_tenant_id] = lambda: "tenant_alice"
+
+    with patch(
+        "app.services.log_service.LogService.get_hydration_range", new_callable=AsyncMock
+    ) as mock_get:
+        mock_get.return_value = [
+            {
+                "log_date": "2025-03-01",
+                "total_volume_ml": "500",
+                "contributing_entries": 2,
+            }
+        ]
+
+        try:
+            response = client.get(
+                "/api/v1/logs/range/hydration",
+                params={"from": "2025-03-01", "to": "2025-03-01"},
+                headers={"X-API-Key": "any"},
+            )
+            assert response.status_code == 200
+            data = response.json()
+            assert len(data) == 1
+            assert data[0]["log_date"] == "2025-03-01"
+        finally:
+            app.dependency_overrides.clear()
+
+
+def test_get_hydration_range_validation_error(client: TestClient):
+    from app.core.security import get_tenant_id
+
+    app.dependency_overrides[get_tenant_id] = lambda: "tenant_alice"
+    try:
+        response = client.get(
+            "/api/v1/logs/range/hydration",
+            params={"from": "2025-03-02", "to": "2025-03-01"},
+            headers={"X-API-Key": "any"},
+        )
+        assert response.status_code == 400
+    finally:
+        app.dependency_overrides.clear()

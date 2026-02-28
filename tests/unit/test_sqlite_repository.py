@@ -110,3 +110,51 @@ async def test_update(sqlite_repo):
 
     found = await sqlite_repo.find_by_id(tenant_id, entry.id)
     assert found.quantity_g == Decimal("200")
+
+
+@pytest.mark.asyncio
+async def test_find_by_date_range(sqlite_repo):
+    tenant_id = "alice"
+
+    entry_inside_1 = create_test_entry(tenant_id)
+    entry_inside_1 = entry_inside_1.model_copy(
+        update={"id": str(uuid.uuid4()), "log_date": date(2024, 5, 20)}
+    )
+    entry_inside_2 = create_test_entry(tenant_id)
+    entry_inside_2 = entry_inside_2.model_copy(
+        update={"id": str(uuid.uuid4()), "log_date": date(2024, 5, 22)}
+    )
+    entry_outside = create_test_entry(tenant_id)
+    entry_outside = entry_outside.model_copy(
+        update={"id": str(uuid.uuid4()), "log_date": date(2024, 5, 25)}
+    )
+
+    await sqlite_repo.save(entry_inside_1)
+    await sqlite_repo.save(entry_inside_2)
+    await sqlite_repo.save(entry_outside)
+
+    results = await sqlite_repo.find_by_date_range(tenant_id, date(2024, 5, 20), date(2024, 5, 23))
+    result_ids = {e.id for e in results}
+
+    assert entry_inside_1.id in result_ids
+    assert entry_inside_2.id in result_ids
+    assert entry_outside.id not in result_ids
+
+
+@pytest.mark.asyncio
+async def test_find_by_date_range_tenant_isolation(sqlite_repo):
+    entry_alice = create_test_entry("alice")
+    entry_alice = entry_alice.model_copy(
+        update={"id": str(uuid.uuid4()), "log_date": date(2024, 5, 20)}
+    )
+    entry_bob = create_test_entry("bob")
+    entry_bob = entry_bob.model_copy(
+        update={"id": str(uuid.uuid4()), "log_date": date(2024, 5, 20)}
+    )
+
+    await sqlite_repo.save(entry_alice)
+    await sqlite_repo.save(entry_bob)
+
+    results = await sqlite_repo.find_by_date_range("alice", date(2024, 5, 19), date(2024, 5, 21))
+    assert len(results) == 1
+    assert results[0].tenant_id == "alice"
