@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
+from typing import Any
 
 from app.domain.models import (
     DailyHydrationSummary,
@@ -15,6 +16,7 @@ from app.domain.models import (
 )
 from app.domain.ports import ProductSourcePort
 from app.repositories.base import AbstractLogRepository
+from app.services.notification_service import NotificationService
 from app.services.product_cache import ProductCache
 
 
@@ -24,10 +26,17 @@ class LogService:
         adapter_registry: dict[DataSource, ProductSourcePort],
         repository: AbstractLogRepository,
         product_cache: ProductCache,
+        notification_service: NotificationService | None = None,
     ) -> None:
         self._adapters = adapter_registry
         self._repo = repository
         self._cache = product_cache
+        self._notification_service = notification_service
+        self._goals_service: Any = None
+
+    def set_goals_service(self, service: Any) -> None:
+        """Sets the goals service for calculating goal-related notifications."""
+        self._goals_service = service
 
     async def create_entry(self, tenant_id: str, payload: LogEntryCreate) -> LogEntry:
         # 1. Check cache
@@ -46,7 +55,35 @@ class LogService:
             log_date=payload.log_date or datetime.now(UTC).date(),
             note=payload.note,
         )
-        return await self._repo.save(entry)
+        saved_entry = await self._repo.save(entry)
+        await self._handle_notifications(tenant_id, saved_entry)
+        return saved_entry
+
+    async def _handle_notifications(self, tenant_id: str, entry: LogEntry) -> None:
+        """Handles triggering notifications for new entries."""
+        if not self._notification_service:
+            return
+
+        # 1. Check for first log of the day
+        daily_entries = await self.get_entries_for_date(tenant_id, entry.log_date)
+        if len(daily_entries) == 1:
+            await self._notification_service.send(
+                "Nutrition Tracker", f"Logging started for {entry.log_date}"
+            )
+
+        # 2. Check for calorie goal reached
+        if self._goals_service:
+            goals = await self._goals_service.get_goals(tenant_id)
+            if goals.calories_kcal is not None:
+                summary = await self.get_daily_nutrition(tenant_id, entry.log_date)
+                current_total = summary.totals.calories_kcal
+                previous_total = current_total - entry.scaled_macros.calories_kcal
+
+                if current_total >= goals.calories_kcal and previous_total < goals.calories_kcal:
+                    await self._notification_service.send(
+                        "Goal Reached!",
+                        f"You have reached your daily calorie goal of {goals.calories_kcal} kcal!",
+                    )
 
     async def get_entries_for_date(self, tenant_id: str, log_date: date) -> list[LogEntry]:
         return await self._repo.find_by_date(tenant_id, log_date)
