@@ -31,8 +31,8 @@ _OFF_RESPONSE_BEVERAGE = {
 }
 
 
-@pytest.mark.asyncio
-async def test_off_adapter_normalizes_beverage_correctly():
+@pytest.mark.asyncio  # type: ignore[misc]
+async def test_off_adapter_normalizes_beverage_correctly() -> None:
     mock_response = MagicMock(spec=httpx.Response)
     mock_response.status_code = 200
     mock_response.json.return_value = _OFF_RESPONSE_BEVERAGE
@@ -54,8 +54,8 @@ async def test_off_adapter_normalizes_beverage_correctly():
     assert product.micronutrients.sodium_mg == Decimal("10")  # 0.01g * 1000
 
 
-@pytest.mark.asyncio
-async def test_off_adapter_raises_not_found():
+@pytest.mark.asyncio  # type: ignore[misc]
+async def test_off_adapter_raises_not_found() -> None:
     mock_response = MagicMock(spec=httpx.Response)
     mock_response.status_code = 200
     mock_response.json.return_value = {"status": 0, "product": None}
@@ -70,8 +70,8 @@ async def test_off_adapter_raises_not_found():
         await adapter.fetch_by_id("0000000000000")
 
 
-@pytest.mark.asyncio
-async def test_off_adapter_detects_liquid_via_product_type():
+@pytest.mark.asyncio  # type: ignore[misc]
+async def test_off_adapter_detects_liquid_via_product_type() -> None:
     mock_response = MagicMock(spec=httpx.Response)
     mock_response.status_code = 200
     mock_response.json.return_value = {
@@ -100,8 +100,8 @@ async def test_off_adapter_detects_liquid_via_product_type():
     assert product.volume_ml_per_100g == Decimal("100")
 
 
-@pytest.mark.asyncio
-async def test_off_adapter_fetch_http_error_raises_external_api_error():
+@pytest.mark.asyncio  # type: ignore[misc]
+async def test_off_adapter_fetch_http_error_raises_external_api_error() -> None:
     mock_response = MagicMock(spec=httpx.Response)
     mock_response.status_code = 500
     mock_response.raise_for_status.side_effect = httpx.HTTPStatusError(
@@ -120,8 +120,8 @@ async def test_off_adapter_fetch_http_error_raises_external_api_error():
     assert exc_info.value.source == "open_food_facts"
 
 
-@pytest.mark.asyncio
-async def test_off_adapter_fetch_request_error_raises_external_api_error():
+@pytest.mark.asyncio  # type: ignore[misc]
+async def test_off_adapter_fetch_request_error_raises_external_api_error() -> None:
     mock_client = AsyncMock(spec=httpx.AsyncClient)
     mock_client.get.side_effect = httpx.RequestError("Connection refused")
 
@@ -150,8 +150,8 @@ _OFF_SEARCH_RESPONSE = {
 }
 
 
-@pytest.mark.asyncio
-async def test_off_adapter_search_returns_products():
+@pytest.mark.asyncio  # type: ignore[misc]
+async def test_off_adapter_search_returns_products() -> None:
     mock_response = MagicMock(spec=httpx.Response)
     mock_response.status_code = 200
     mock_response.json.return_value = _OFF_SEARCH_RESPONSE
@@ -170,8 +170,8 @@ async def test_off_adapter_search_returns_products():
     assert results[0].is_liquid is False
 
 
-@pytest.mark.asyncio
-async def test_off_adapter_search_raises_external_api_error():
+@pytest.mark.asyncio  # type: ignore[misc]
+async def test_off_adapter_search_raises_external_api_error() -> None:
     mock_client = AsyncMock(spec=httpx.AsyncClient)
     mock_client.get.side_effect = httpx.RequestError("Timeout")
 
@@ -200,8 +200,8 @@ _USDA_FETCH_RESPONSE = {
 }
 
 
-@pytest.mark.asyncio
-async def test_usda_adapter_fetch_by_id_success():
+@pytest.mark.asyncio  # type: ignore[misc]
+async def test_usda_adapter_fetch_by_id_success() -> None:
     mock_response = MagicMock(spec=httpx.Response)
     mock_response.status_code = 200
     mock_response.json.return_value = _USDA_FETCH_RESPONSE
@@ -224,8 +224,8 @@ async def test_usda_adapter_fetch_by_id_success():
     assert product.micronutrients.sodium_mg == Decimal("43.0")
 
 
-@pytest.mark.asyncio
-async def test_usda_adapter_fetch_beverage_is_liquid():
+@pytest.mark.asyncio  # type: ignore[misc]
+async def test_usda_adapter_fetch_beverage_is_liquid() -> None:
     liquid_response = dict(_USDA_FETCH_RESPONSE)
     liquid_response["foodCategory"] = "Beverages"
 
@@ -244,8 +244,8 @@ async def test_usda_adapter_fetch_beverage_is_liquid():
     assert product.volume_ml_per_100g == Decimal("100")
 
 
-@pytest.mark.asyncio
-async def test_usda_adapter_fetch_not_found():
+@pytest.mark.asyncio  # type: ignore[misc]
+async def test_usda_adapter_fetch_not_found() -> None:
     mock_response = MagicMock(spec=httpx.Response)
     mock_response.status_code = 404
     mock_response.raise_for_status = MagicMock()
@@ -260,8 +260,8 @@ async def test_usda_adapter_fetch_not_found():
     assert exc_info.value.source == "usda_fooddata"
 
 
-@pytest.mark.asyncio
-async def test_usda_adapter_fetch_http_error_raises_external_api_error():
+@pytest.mark.asyncio  # type: ignore[misc]
+async def test_usda_adapter_fetch_http_error_raises_external_api_error() -> None:
     mock_response = MagicMock(spec=httpx.Response)
     mock_response.status_code = 500
     mock_response.raise_for_status.side_effect = httpx.HTTPStatusError(
@@ -280,8 +280,8 @@ async def test_usda_adapter_fetch_http_error_raises_external_api_error():
     assert exc_info.value.source == "usda_fooddata"
 
 
-@pytest.mark.asyncio
-async def test_usda_adapter_search_returns_products():
+@pytest.mark.asyncio  # type: ignore[misc]
+async def test_usda_adapter_search_returns_products() -> None:
     mock_response = MagicMock(spec=httpx.Response)
     mock_response.status_code = 200
     mock_response.json.return_value = {
@@ -301,8 +301,8 @@ async def test_usda_adapter_search_returns_products():
     assert results[0].name == "WHOLE MILK"
 
 
-@pytest.mark.asyncio
-async def test_usda_adapter_search_raises_external_api_error():
+@pytest.mark.asyncio  # type: ignore[misc]
+async def test_usda_adapter_search_raises_external_api_error() -> None:
     mock_client = AsyncMock(spec=httpx.AsyncClient)
     mock_client.get.side_effect = httpx.RequestError("Connection error")
 
@@ -332,8 +332,8 @@ def _make_manual_product(product_id: str = "manual-1") -> GeneralizedProduct:
     )
 
 
-@pytest.mark.asyncio
-async def test_manual_adapter_fetch_by_id_found():
+@pytest.mark.asyncio  # type: ignore[misc]
+async def test_manual_adapter_fetch_by_id_found() -> None:
     repo = ManualProductRepository()
     product = _make_manual_product("manual-1")
     repo.save(product)
@@ -346,8 +346,8 @@ async def test_manual_adapter_fetch_by_id_found():
     assert found.source == DataSource.MANUAL
 
 
-@pytest.mark.asyncio
-async def test_manual_adapter_fetch_by_id_not_found():
+@pytest.mark.asyncio  # type: ignore[misc]
+async def test_manual_adapter_fetch_by_id_not_found() -> None:
     repo = ManualProductRepository()
     adapter = ManualProductAdapter(repository=repo)
 
@@ -356,8 +356,8 @@ async def test_manual_adapter_fetch_by_id_not_found():
     assert exc_info.value.source == DataSource.MANUAL
 
 
-@pytest.mark.asyncio
-async def test_manual_adapter_search_returns_matching_products():
+@pytest.mark.asyncio  # type: ignore[misc]
+async def test_manual_adapter_search_returns_matching_products() -> None:
     repo = ManualProductRepository()
     repo.save(_make_manual_product("m-1"))
     repo.save(
@@ -381,8 +381,8 @@ async def test_manual_adapter_search_returns_matching_products():
     assert results[0].id == "m-1"
 
 
-@pytest.mark.asyncio
-async def test_manual_adapter_search_matches_brand():
+@pytest.mark.asyncio  # type: ignore[misc]
+async def test_manual_adapter_search_matches_brand() -> None:
     repo = ManualProductRepository()
     repo.save(_make_manual_product("m-1"))  # brand="My Kitchen"
 

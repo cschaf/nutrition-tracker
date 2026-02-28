@@ -9,15 +9,15 @@ from app.domain.models import DataSource, GeneralizedProduct, LogEntry, Macronut
 from app.repositories.sqlite_log_repository import SQLiteLogRepository
 
 
-@pytest_asyncio.fixture
-async def sqlite_repo():
+@pytest_asyncio.fixture  # type: ignore[misc]
+async def sqlite_repo() -> SQLiteLogRepository:
     # Use in-memory SQLite for testing
     repo = SQLiteLogRepository("sqlite+aiosqlite:///:memory:")
     await repo.initialize()
     return repo
 
 
-def create_test_entry(tenant_id: str, entry_id: str = None) -> LogEntry:
+def create_test_entry(tenant_id: str, entry_id: str | None = None) -> LogEntry:
     return LogEntry(
         id=entry_id or str(uuid.uuid4()),
         tenant_id=tenant_id,
@@ -38,8 +38,8 @@ def create_test_entry(tenant_id: str, entry_id: str = None) -> LogEntry:
     )
 
 
-@pytest.mark.asyncio
-async def test_save_and_find_by_id(sqlite_repo):
+@pytest.mark.asyncio  # type: ignore[misc]
+async def test_save_and_find_by_id(sqlite_repo: SQLiteLogRepository) -> None:
     tenant_id = "alice"
     entry = create_test_entry(tenant_id)
 
@@ -52,8 +52,8 @@ async def test_save_and_find_by_id(sqlite_repo):
     assert found.product.name == "Test Product"
 
 
-@pytest.mark.asyncio
-async def test_find_by_id_wrong_tenant(sqlite_repo):
+@pytest.mark.asyncio  # type: ignore[misc]
+async def test_find_by_id_wrong_tenant(sqlite_repo: SQLiteLogRepository) -> None:
     entry = create_test_entry("alice")
     await sqlite_repo.save(entry)
 
@@ -61,8 +61,8 @@ async def test_find_by_id_wrong_tenant(sqlite_repo):
     assert found is None
 
 
-@pytest.mark.asyncio
-async def test_find_by_date(sqlite_repo):
+@pytest.mark.asyncio  # type: ignore[misc]
+async def test_find_by_date(sqlite_repo: SQLiteLogRepository) -> None:
     tenant_id = "alice"
     entry1 = create_test_entry(tenant_id)
     entry2 = create_test_entry(tenant_id)
@@ -80,8 +80,8 @@ async def test_find_by_date(sqlite_repo):
     assert entries_21[0].id == entry2.id
 
 
-@pytest.mark.asyncio
-async def test_delete(sqlite_repo):
+@pytest.mark.asyncio  # type: ignore[misc]
+async def test_delete(sqlite_repo: SQLiteLogRepository) -> None:
     tenant_id = "alice"
     entry = create_test_entry(tenant_id)
     await sqlite_repo.save(entry)
@@ -93,14 +93,14 @@ async def test_delete(sqlite_repo):
     assert found is None
 
 
-@pytest.mark.asyncio
-async def test_delete_nonexistent(sqlite_repo):
+@pytest.mark.asyncio  # type: ignore[misc]
+async def test_delete_nonexistent(sqlite_repo: SQLiteLogRepository) -> None:
     deleted = await sqlite_repo.delete("alice", "nonexistent")
     assert deleted is False
 
 
-@pytest.mark.asyncio
-async def test_update(sqlite_repo):
+@pytest.mark.asyncio  # type: ignore[misc]
+async def test_update(sqlite_repo: SQLiteLogRepository) -> None:
     tenant_id = "alice"
     entry = create_test_entry(tenant_id)
     await sqlite_repo.save(entry)
@@ -109,11 +109,12 @@ async def test_update(sqlite_repo):
     await sqlite_repo.update(updated_entry)
 
     found = await sqlite_repo.find_by_id(tenant_id, entry.id)
+    assert found is not None
     assert found.quantity_g == Decimal("200")
 
 
-@pytest.mark.asyncio
-async def test_find_by_date_range(sqlite_repo):
+@pytest.mark.asyncio  # type: ignore[misc]
+async def test_find_by_date_range(sqlite_repo: SQLiteLogRepository) -> None:
     tenant_id = "alice"
 
     entry_inside_1 = create_test_entry(tenant_id)
@@ -141,8 +142,8 @@ async def test_find_by_date_range(sqlite_repo):
     assert entry_outside.id not in result_ids
 
 
-@pytest.mark.asyncio
-async def test_find_by_date_range_tenant_isolation(sqlite_repo):
+@pytest.mark.asyncio  # type: ignore[misc]
+async def test_find_by_date_range_tenant_isolation(sqlite_repo: SQLiteLogRepository) -> None:
     entry_alice = create_test_entry("alice")
     entry_alice = entry_alice.model_copy(
         update={"id": str(uuid.uuid4()), "log_date": date(2024, 5, 20)}

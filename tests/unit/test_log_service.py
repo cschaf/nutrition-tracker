@@ -36,8 +36,8 @@ def _make_product(is_liquid: bool = False) -> GeneralizedProduct:
     )
 
 
-@pytest.mark.asyncio
-async def test_daily_hydration_only_counts_liquids():
+@pytest.mark.asyncio  # type: ignore[misc]
+async def test_daily_hydration_only_counts_liquids() -> None:
     mock_adapter = AsyncMock()
     mock_adapter.fetch_by_id.return_value = _make_product(is_liquid=True)
 
@@ -59,8 +59,8 @@ async def test_daily_hydration_only_counts_liquids():
     assert summary.contributing_entries == 1
 
 
-@pytest.mark.asyncio
-async def test_tenant_isolation():
+@pytest.mark.asyncio  # type: ignore[misc]
+async def test_tenant_isolation() -> None:
     mock_adapter = AsyncMock()
     mock_adapter.fetch_by_id.return_value = _make_product()
 
@@ -82,8 +82,8 @@ async def test_tenant_isolation():
     assert len(bob_entries) == 0
 
 
-@pytest.mark.asyncio
-async def test_get_nutrition_range():
+@pytest.mark.asyncio  # type: ignore[misc]
+async def test_get_nutrition_range() -> None:
     mock_adapter = AsyncMock()
     mock_adapter.fetch_by_id.return_value = _make_product()
 
@@ -125,8 +125,8 @@ async def test_get_nutrition_range():
     assert summaries[1].totals.calories_kcal == Decimal("200.00")
 
 
-@pytest.mark.asyncio
-async def test_get_hydration_range():
+@pytest.mark.asyncio  # type: ignore[misc]
+async def test_get_hydration_range() -> None:
     mock_adapter = AsyncMock()
     mock_adapter.fetch_by_id.return_value = _make_product(is_liquid=True)
 
@@ -160,8 +160,8 @@ async def test_get_hydration_range():
     assert summaries[1].total_volume_ml == Decimal("0")
 
 
-@pytest.mark.asyncio
-async def test_get_entry_returns_existing_entry():
+@pytest.mark.asyncio  # type: ignore[misc]
+async def test_get_entry_returns_existing_entry() -> None:
     mock_adapter = AsyncMock()
     mock_adapter.fetch_by_id.return_value = _make_product()
 
@@ -183,8 +183,8 @@ async def test_get_entry_returns_existing_entry():
     assert found.id == created.id
 
 
-@pytest.mark.asyncio
-async def test_get_entry_returns_none_for_unknown():
+@pytest.mark.asyncio  # type: ignore[misc]
+async def test_get_entry_returns_none_for_unknown() -> None:
     repo = InMemoryLogRepository()
     cache = ProductCache(ttl_seconds=60)
     service = LogService(
@@ -197,8 +197,8 @@ async def test_get_entry_returns_none_for_unknown():
     assert result is None
 
 
-@pytest.mark.asyncio
-async def test_update_entry_changes_quantity():
+@pytest.mark.asyncio  # type: ignore[misc]
+async def test_update_entry_changes_quantity() -> None:
     mock_adapter = AsyncMock()
     mock_adapter.fetch_by_id.return_value = _make_product()
 
@@ -223,8 +223,8 @@ async def test_update_entry_changes_quantity():
     assert updated.id == created.id
 
 
-@pytest.mark.asyncio
-async def test_update_entry_returns_none_for_unknown():
+@pytest.mark.asyncio  # type: ignore[misc]
+async def test_update_entry_returns_none_for_unknown() -> None:
     repo = InMemoryLogRepository()
     cache = ProductCache(ttl_seconds=60)
     service = LogService(
@@ -238,8 +238,8 @@ async def test_update_entry_returns_none_for_unknown():
     assert result is None
 
 
-@pytest.mark.asyncio
-async def test_delete_entry_returns_true_on_success():
+@pytest.mark.asyncio  # type: ignore[misc]
+async def test_delete_entry_returns_true_on_success() -> None:
     mock_adapter = AsyncMock()
     mock_adapter.fetch_by_id.return_value = _make_product()
 
@@ -263,8 +263,8 @@ async def test_delete_entry_returns_true_on_success():
     assert found is None
 
 
-@pytest.mark.asyncio
-async def test_delete_entry_returns_false_for_unknown():
+@pytest.mark.asyncio  # type: ignore[misc]
+async def test_delete_entry_returns_false_for_unknown() -> None:
     repo = InMemoryLogRepository()
     cache = ProductCache(ttl_seconds=60)
     service = LogService(
@@ -277,8 +277,8 @@ async def test_delete_entry_returns_false_for_unknown():
     assert result is False
 
 
-@pytest.mark.asyncio
-async def test_handle_notifications_sends_first_log_of_day():
+@pytest.mark.asyncio  # type: ignore[misc]
+async def test_handle_notifications_sends_first_log_of_day() -> None:
     mock_adapter = AsyncMock()
     mock_adapter.fetch_by_id.return_value = _make_product()
 
@@ -304,8 +304,8 @@ async def test_handle_notifications_sends_first_log_of_day():
     assert "Logging started" in call_args.args[1]
 
 
-@pytest.mark.asyncio
-async def test_handle_notifications_calorie_goal_reached():
+@pytest.mark.asyncio  # type: ignore[misc]
+async def test_handle_notifications_calorie_goal_reached() -> None:
     mock_adapter = AsyncMock()
     mock_adapter.fetch_by_id.return_value = _make_product()  # 100 kcal per 100g
 
@@ -337,8 +337,8 @@ async def test_handle_notifications_calorie_goal_reached():
     assert "Goal Reached!" in titles
 
 
-@pytest.mark.asyncio
-async def test_handle_notifications_no_service_does_not_raise():
+@pytest.mark.asyncio  # type: ignore[misc]
+async def test_handle_notifications_no_service_does_not_raise() -> None:
     mock_adapter = AsyncMock()
     mock_adapter.fetch_by_id.return_value = _make_product()
 

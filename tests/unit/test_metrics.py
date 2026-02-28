@@ -11,10 +11,12 @@ def test_request_count_middleware() -> None:
 
     # Get initial value (if any)
     def get_count(method: str, path: str, status_code: str) -> float:
-        return REGISTRY.get_sample_value(
-            "http_requests_total",
-            {"method": method, "path": path, "status_code": status_code}
-        ) or 0.0
+        return (
+            REGISTRY.get_sample_value(
+                "http_requests_total", {"method": method, "path": path, "status_code": status_code}
+            )
+            or 0.0
+        )
 
     initial = get_count("GET", "/healthz", "200")
 
@@ -65,7 +67,7 @@ def test_cache_metrics() -> None:
             protein_g=Decimal("0"),
             carbohydrates_g=Decimal("0"),
             fat_g=Decimal("0"),
-        )
+        ),
     )
     cache.set(DataSource.OPEN_FOOD_FACTS, "123", product)
     cache.get(DataSource.OPEN_FOOD_FACTS, "123")

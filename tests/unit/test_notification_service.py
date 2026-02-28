@@ -8,21 +8,21 @@ from app.core.config import Settings
 from app.services.notification_service import NotificationService
 
 
-@pytest.fixture
-def http_client():
+@pytest.fixture  # type: ignore[misc]
+def http_client() -> AsyncMock:
     return AsyncMock(spec=httpx.AsyncClient)
 
 
-@pytest.fixture
-def settings():
+@pytest.fixture  # type: ignore[misc]
+def settings() -> MagicMock:
     s = MagicMock(spec=Settings)
     s.webhook_enabled = True
     s.webhook_url = "https://ntfy.sh/my-topic"
     return s
 
 
-@pytest.mark.asyncio
-async def test_ntfy_sends_correct_request(http_client, settings):
+@pytest.mark.asyncio  # type: ignore[misc]
+async def test_ntfy_sends_correct_request(http_client: AsyncMock, settings: MagicMock) -> None:
     service = NotificationService(http_client, settings)
     await service.send("Test Title", "Test Message")
 
@@ -37,8 +37,8 @@ async def test_ntfy_sends_correct_request(http_client, settings):
     )
 
 
-@pytest.mark.asyncio
-async def test_gotify_sends_correct_json(http_client, settings):
+@pytest.mark.asyncio  # type: ignore[misc]
+async def test_gotify_sends_correct_json(http_client: AsyncMock, settings: MagicMock) -> None:
     settings.webhook_url = "https://gotify.example.com"
     service = NotificationService(http_client, settings)
     await service.send("Test Title", "Test Message")
@@ -56,8 +56,8 @@ async def test_gotify_sends_correct_json(http_client, settings):
     )
 
 
-@pytest.mark.asyncio
-async def test_disabled_webhook_skips_http(http_client, settings):
+@pytest.mark.asyncio  # type: ignore[misc]
+async def test_disabled_webhook_skips_http(http_client: AsyncMock, settings: MagicMock) -> None:
     settings.webhook_enabled = False
     service = NotificationService(http_client, settings)
     await service.send("Test Title", "Test Message")
@@ -66,8 +66,10 @@ async def test_disabled_webhook_skips_http(http_client, settings):
     http_client.post.assert_not_called()
 
 
-@pytest.mark.asyncio
-async def test_error_is_not_propagated(http_client, settings, caplog):
+@pytest.mark.asyncio  # type: ignore[misc]
+async def test_error_is_not_propagated(
+    http_client: AsyncMock, settings: MagicMock, caplog: pytest.LogCaptureFixture
+) -> None:
     http_client.post.side_effect = httpx.RequestError("Network down")
     service = NotificationService(http_client, settings)
 

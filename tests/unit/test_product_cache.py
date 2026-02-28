@@ -6,7 +6,7 @@ from app.domain.models import DataSource, GeneralizedProduct, Macronutrients
 from app.services.product_cache import ProductCache
 
 
-def test_cache_hit_and_miss():
+def test_cache_hit_and_miss() -> None:
     cache = ProductCache(ttl_seconds=60)
     product = GeneralizedProduct(
         id="123",
@@ -31,7 +31,7 @@ def test_cache_hit_and_miss():
     assert cached == product
 
 
-def test_cache_ttl_expiry():
+def test_cache_ttl_expiry() -> None:
     ttl = 10
     cache = ProductCache(ttl_seconds=ttl)
     product = GeneralizedProduct(
@@ -60,7 +60,7 @@ def test_cache_ttl_expiry():
         assert cache.get(DataSource.OPEN_FOOD_FACTS, "123") is None
 
 
-def test_cache_different_sources():
+def test_cache_different_sources() -> None:
     cache = ProductCache(ttl_seconds=60)
     product_off = GeneralizedProduct(
         id="123",

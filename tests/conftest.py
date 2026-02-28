@@ -10,7 +10,7 @@ from app.core.config import Settings, get_settings
 from app.main import app
 
 
-@pytest.fixture
+@pytest.fixture  # type: ignore[misc]
 def test_settings() -> Settings:
     return Settings(
         api_keys={"test-key-alice": "tenant_alice", "test-key-bob": "tenant_bob"},
@@ -18,7 +18,7 @@ def test_settings() -> Settings:
     )
 
 
-@pytest.fixture
+@pytest.fixture  # type: ignore[misc]
 def client(test_settings: Settings) -> Generator[TestClient, None, None]:
     # Reset the log-repository singleton so each test starts with an empty
     # in-memory SQLite database (avoids bleed-over from previous test runs or
@@ -28,15 +28,16 @@ def client(test_settings: Settings) -> Generator[TestClient, None, None]:
     # for FastAPI; plain unittest.mock.patch does not reach Depends() callbacks).
     app.dependency_overrides[get_settings] = lambda: test_settings
     try:
-        with patch("app.core.config.get_settings", return_value=test_settings), TestClient(
-            app
-        ) as c:
+        with (
+            patch("app.core.config.get_settings", return_value=test_settings),
+            TestClient(app) as c,
+        ):
             yield c
     finally:
         app.dependency_overrides.pop(get_settings, None)
         _deps._repository = None
 
 
-@pytest.fixture
-def alice_headers() -> dict:
+@pytest.fixture  # type: ignore[misc]
+def alice_headers() -> dict[str, str]:
     return {"X-API-Key": "test-key-alice"}

@@ -6,7 +6,7 @@ from app.core.security import get_tenant_id
 from app.main import app
 
 
-def test_export_logs_csv_success(client: TestClient, alice_headers: dict):
+def test_export_logs_csv_success(client: TestClient, alice_headers: dict[str, str]) -> None:
     app.dependency_overrides[get_tenant_id] = lambda: "tenant_alice"
 
     with patch(
@@ -33,7 +33,9 @@ def test_export_logs_csv_success(client: TestClient, alice_headers: dict):
             app.dependency_overrides.clear()
 
 
-def test_export_logs_csv_validation_error(client: TestClient, alice_headers: dict):
+def test_export_logs_csv_validation_error(
+    client: TestClient, alice_headers: dict[str, str]
+) -> None:
     app.dependency_overrides[get_tenant_id] = lambda: "tenant_alice"
     try:
         # 'to' before 'from'

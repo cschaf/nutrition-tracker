@@ -8,7 +8,7 @@ from app.domain.ports import ExternalApiError, ProductNotFoundError, ProductSour
 from app.services.barcode_service import BarcodeService
 
 
-@pytest.fixture
+@pytest.fixture  # type: ignore[misc]
 def mock_product() -> GeneralizedProduct:
     return GeneralizedProduct(
         id="123456",
@@ -23,17 +23,17 @@ def mock_product() -> GeneralizedProduct:
     )
 
 
-@pytest.fixture
+@pytest.fixture  # type: ignore[misc]
 def off_adapter() -> AsyncMock:
     return AsyncMock(spec=ProductSourcePort)
 
 
-@pytest.fixture
+@pytest.fixture  # type: ignore[misc]
 def usda_adapter() -> AsyncMock:
     return AsyncMock(spec=ProductSourcePort)
 
 
-@pytest.fixture
+@pytest.fixture  # type: ignore[misc]
 def adapter_registry(
     off_adapter: AsyncMock, usda_adapter: AsyncMock
 ) -> dict[DataSource, ProductSourcePort]:
@@ -43,7 +43,7 @@ def adapter_registry(
     }
 
 
-@pytest.fixture
+@pytest.fixture  # type: ignore[misc]
 def barcode_service(adapter_registry: dict[DataSource, ProductSourcePort]) -> BarcodeService:
     return BarcodeService(
         adapter_registry=adapter_registry,
@@ -51,7 +51,7 @@ def barcode_service(adapter_registry: dict[DataSource, ProductSourcePort]) -> Ba
     )
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio  # type: ignore[misc]
 async def test_found_in_first_adapter(
     barcode_service: BarcodeService,
     off_adapter: AsyncMock,
@@ -68,7 +68,7 @@ async def test_found_in_first_adapter(
     usda_adapter.fetch_by_id.assert_not_called()
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio  # type: ignore[misc]
 async def test_fallback_to_second_adapter(
     barcode_service: BarcodeService,
     off_adapter: AsyncMock,
@@ -89,7 +89,7 @@ async def test_fallback_to_second_adapter(
     usda_adapter.fetch_by_id.assert_called_once_with("123456")
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio  # type: ignore[misc]
 async def test_not_found_anywhere(
     barcode_service: BarcodeService,
     off_adapter: AsyncMock,
@@ -107,7 +107,7 @@ async def test_not_found_anywhere(
     assert usda_adapter.fetch_by_id.called
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio  # type: ignore[misc]
 async def test_external_api_error_propagates(
     barcode_service: BarcodeService,
     off_adapter: AsyncMock,
@@ -123,7 +123,7 @@ async def test_external_api_error_propagates(
     usda_adapter.fetch_by_id.assert_not_called()
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio  # type: ignore[misc]
 async def test_invalid_source_in_config_skipped(
     off_adapter: AsyncMock,
     adapter_registry: dict[DataSource, ProductSourcePort],

@@ -1,3 +1,4 @@
+from collections.abc import Generator
 from decimal import Decimal
 from unittest.mock import AsyncMock
 
@@ -5,13 +6,13 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.api.dependencies import get_adapter_registry
-from app.core.config import get_settings
+from app.core.config import Settings, get_settings
 from app.domain.models import DataSource, GeneralizedProduct, Macronutrients, Micronutrients
 from app.main import app
 
 
-@pytest.fixture
-def mock_adapter_registry():
+@pytest.fixture  # type: ignore[misc]
+def mock_adapter_registry() -> dict[DataSource, AsyncMock]:
     mock_adapter = AsyncMock()
     mock_adapter.fetch_by_id.return_value = GeneralizedProduct(
         id="test-product",
@@ -28,23 +29,28 @@ def mock_adapter_registry():
     return {DataSource.MANUAL: mock_adapter}
 
 
-@pytest.fixture
-def override_adapter_registry(mock_adapter_registry):
+@pytest.fixture  # type: ignore[misc]
+def override_adapter_registry(
+    mock_adapter_registry: dict[DataSource, AsyncMock],
+) -> Generator[None, None, None]:
     app.dependency_overrides[get_adapter_registry] = lambda: mock_adapter_registry
     yield
     app.dependency_overrides.pop(get_adapter_registry)
 
 
-@pytest.fixture
-def override_settings(test_settings):
+@pytest.fixture  # type: ignore[misc]
+def override_settings(test_settings: Settings) -> Generator[None, None, None]:
     app.dependency_overrides[get_settings] = lambda: test_settings
     yield
     app.dependency_overrides.pop(get_settings)
 
 
 def test_template_lifecycle(
-    client: TestClient, alice_headers: dict[str, str], override_adapter_registry, override_settings
-):
+    client: TestClient,
+    alice_headers: dict[str, str],
+    override_adapter_registry: None,
+    override_settings: None,
+) -> None:
     # 1. Create a template
     payload = {
         "name": "Quick Lunch",
@@ -90,7 +96,9 @@ def test_template_lifecycle(
     assert len(response.json()) == 0
 
 
-def test_template_not_found(client: TestClient, alice_headers: dict[str, str], override_settings):
+def test_template_not_found(
+    client: TestClient, alice_headers: dict[str, str], override_settings: None
+) -> None:
     response = client.delete("/api/v1/templates/nonexistent", headers=alice_headers)
     assert response.status_code == 404
 
