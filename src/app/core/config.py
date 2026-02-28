@@ -18,6 +18,7 @@ class Settings(BaseSettings):
 
     # External APIs
     usda_api_key: str = Field(default="DEMO_KEY")
+    barcode_lookup_order: list[str] = Field(default=["open_food_facts", "usda_fooddata"])
 
     # CORS
     cors_origins: list[str] = Field(default=["*"])

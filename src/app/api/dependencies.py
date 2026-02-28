@@ -16,6 +16,7 @@ from app.repositories.goals_repository import GoalsRepository
 from app.repositories.manual_product_repository import ManualProductRepository
 from app.repositories.sqlite_log_repository import SQLiteLogRepository
 from app.repositories.template_repository import TemplateRepository
+from app.services.barcode_service import BarcodeService
 from app.services.export_service import ExportService
 from app.services.goals_service import GoalsService
 from app.services.log_service import LogService
@@ -80,6 +81,16 @@ def get_product_service(
     repo: ManualProductRepository = Depends(get_manual_product_repository),
 ) -> ProductService:
     return ProductService(manual_repo=repo)
+
+
+def get_barcode_service(
+    adapter_registry: dict[DataSource, ProductSourcePort] = Depends(get_adapter_registry),
+    settings: Settings = Depends(get_settings),
+) -> BarcodeService:
+    return BarcodeService(
+        adapter_registry=adapter_registry,
+        lookup_order=settings.barcode_lookup_order,
+    )
 
 
 # Singleton Product Cache

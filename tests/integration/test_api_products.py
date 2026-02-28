@@ -249,3 +249,69 @@ def test_create_manual_liquid_product_validation(client: TestClient, alice_heade
         assert response.status_code == 422
     finally:
         app.dependency_overrides.clear()
+
+
+def test_barcode_lookup_success(client: TestClient, alice_headers: dict[str, str]) -> None:
+    # Mock-Adapter vorbereiten
+    mock_product = GeneralizedProduct(
+        id="4000617011536",
+        source=DataSource.OPEN_FOOD_FACTS,
+        name="Test Water",
+        macronutrients=Macronutrients(
+            calories_kcal="0", protein_g="0", carbohydrates_g="0", fat_g="0"
+        ),
+    )
+
+    mock_off = AsyncMock()
+    mock_off.fetch_by_id.return_value = mock_product
+
+    from app.api.dependencies import get_adapter_registry, get_settings
+    from app.core.config import Settings
+    from app.core.security import get_tenant_id
+
+    # Dependency Overrides
+    app.dependency_overrides[get_tenant_id] = lambda: "tenant_alice"
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        api_keys={"test-key-alice": "tenant_alice"}
+    )
+    app.dependency_overrides[get_adapter_registry] = lambda: {DataSource.OPEN_FOOD_FACTS: mock_off}
+
+    try:
+        response = client.get("/api/v1/products/barcode/4000617011536", headers=alice_headers)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["id"] == "4000617011536"
+        assert data["name"] == "Test Water"
+        assert data["source"] == "open_food_facts"
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_barcode_lookup_not_found(client: TestClient, alice_headers: dict[str, str]) -> None:
+    mock_off = AsyncMock()
+    from app.domain.ports import ProductNotFoundError
+
+    mock_off.fetch_by_id.side_effect = ProductNotFoundError("999", "open_food_facts")
+
+    from app.api.dependencies import get_adapter_registry, get_settings
+    from app.core.config import Settings
+    from app.core.security import get_tenant_id
+
+    app.dependency_overrides[get_tenant_id] = lambda: "tenant_alice"
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        api_keys={"test-key-alice": "tenant_alice"}
+    )
+    app.dependency_overrides[get_adapter_registry] = lambda: {DataSource.OPEN_FOOD_FACTS: mock_off}
+
+    try:
+        response = client.get("/api/v1/products/barcode/999", headers=alice_headers)
+        assert response.status_code == 404
+        assert "not found" in response.json()["detail"].lower()
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_barcode_lookup_unauthenticated(client: TestClient) -> None:
+    # No dependency override here to test real security
+    response = client.get("/api/v1/products/barcode/12345")
+    assert response.status_code == 401
