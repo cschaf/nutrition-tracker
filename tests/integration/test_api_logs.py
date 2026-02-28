@@ -77,3 +77,63 @@ def test_health_check(client: TestClient):
     response = client.get("/healthz")
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
+
+
+def test_get_nutrition_range_success(client: TestClient):
+    from app.core.security import get_tenant_id
+
+    app.dependency_overrides[get_tenant_id] = lambda: "tenant_alice"
+
+    with patch(
+        "app.services.log_service.LogService.get_nutrition_range", new_callable=AsyncMock
+    ) as mock_get:
+        mock_get.return_value = [
+            {
+                "log_date": "2025-01-01",
+                "total_entries": 1,
+                "totals": {
+                    "calories_kcal": "100.00",
+                    "protein_g": "10.00",
+                    "carbohydrates_g": "50.00",
+                    "fat_g": "5.00",
+                },
+            }
+        ]
+
+        try:
+            response = client.get(
+                "/api/v1/logs/range/nutrition",
+                params={"from": "2025-01-01", "to": "2025-01-01"},
+                headers={"X-API-Key": "any"},
+            )
+            assert response.status_code == 200
+            data = response.json()
+            assert len(data) == 1
+            assert data[0]["log_date"] == "2025-01-01"
+        finally:
+            app.dependency_overrides.clear()
+
+
+def test_get_range_validation_error(client: TestClient):
+    from app.core.security import get_tenant_id
+
+    app.dependency_overrides[get_tenant_id] = lambda: "tenant_alice"
+
+    try:
+        # 'to' before 'from'
+        response = client.get(
+            "/api/v1/logs/range/nutrition",
+            params={"from": "2025-01-02", "to": "2025-01-01"},
+            headers={"X-API-Key": "any"},
+        )
+        assert response.status_code == 400
+
+        # range too long
+        response = client.get(
+            "/api/v1/logs/range/nutrition",
+            params={"from": "2025-01-01", "to": "2026-02-01"},
+            headers={"X-API-Key": "any"},
+        )
+        assert response.status_code == 400
+    finally:
+        app.dependency_overrides.clear()

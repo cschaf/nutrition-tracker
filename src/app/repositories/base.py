@@ -25,6 +25,13 @@ class AbstractLogRepository(ABC):
         ...
 
     @abstractmethod
+    async def find_by_date_range(
+        self, tenant_id: str, start_date: date, end_date: date
+    ) -> list[LogEntry]:
+        """Finds all log entries within a date range (inclusive) for a tenant ID."""
+        ...
+
+    @abstractmethod
     async def delete(self, tenant_id: str, entry_id: str) -> bool:
         """Deletes a log entry by ID and tenant ID. Returns True if deleted."""
         ...

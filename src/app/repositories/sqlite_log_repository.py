@@ -73,6 +73,19 @@ class SQLiteLogRepository(AbstractLogRepository):
             )
             return [LogEntry.model_validate_json(row.data) for row in result.scalars()]
 
+    async def find_by_date_range(
+        self, tenant_id: str, start_date: date, end_date: date
+    ) -> list[LogEntry]:
+        async with self.async_session_maker() as session:
+            result = await session.execute(
+                select(LogEntryORM).where(
+                    LogEntryORM.log_date >= start_date,
+                    LogEntryORM.log_date <= end_date,
+                    LogEntryORM.tenant_id == tenant_id,
+                )
+            )
+            return [LogEntry.model_validate_json(row.data) for row in result.scalars()]
+
     async def delete(self, tenant_id: str, entry_id: str) -> bool:
         async with self.async_session_maker() as session, session.begin():
             result = await session.execute(

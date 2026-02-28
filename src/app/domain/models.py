@@ -6,7 +6,7 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 from enum import StrEnum
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 # ---------------------------------------------------------------------------
 # Value Objects
@@ -154,3 +154,16 @@ class DailyHydrationSummary(BaseModel):
     log_date: date
     total_volume_ml: Decimal
     contributing_entries: int
+
+
+class DateRangeParams(BaseModel):
+    start_date: date
+    end_date: date
+
+    @model_validator(mode="after")
+    def check_date_range(self) -> DateRangeParams:
+        if self.end_date < self.start_date:
+            raise ValueError("'to' date must be after or equal to 'from' date")
+        if (self.end_date - self.start_date).days > 366:
+            raise ValueError("Date range cannot exceed 366 days")
+        return self
