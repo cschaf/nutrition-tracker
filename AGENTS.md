@@ -205,6 +205,18 @@ repos:
       - id: ruff
         args: [--fix, --exit-non-zero-on-fix]
       - id: ruff-format
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.15.0
+    hooks:
+      - id: mypy
+        args: [--strict, --ignore-missing-imports]
+        additional_dependencies:
+          - pydantic-settings
+          - pydantic>=2
+          - fastapi
+          - httpx
+          - sqlalchemy[asyncio]
+          - prometheus-client
 ```
 
 After this, ruff runs automatically on every `git commit`. **A commit that fails ruff will be rejected locally** before it ever reaches CI.

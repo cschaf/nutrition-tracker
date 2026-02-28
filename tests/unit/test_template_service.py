@@ -9,23 +9,23 @@ from app.services.log_service import LogService
 from app.services.template_service import TemplateService
 
 
-@pytest.fixture
-def template_repo():
+@pytest.fixture  # type: ignore[misc]
+def template_repo() -> TemplateRepository:
     return TemplateRepository()
 
 
-@pytest.fixture
-def log_service():
+@pytest.fixture  # type: ignore[misc]
+def log_service() -> MagicMock:
     return MagicMock(spec=LogService)
 
 
-@pytest.fixture
-def template_service(template_repo, log_service):
+@pytest.fixture  # type: ignore[misc]
+def template_service(template_repo: TemplateRepository, log_service: MagicMock) -> TemplateService:
     return TemplateService(repository=template_repo, log_service=log_service)
 
 
-@pytest.mark.asyncio
-async def test_create_and_get_templates(template_service):
+@pytest.mark.asyncio  # type: ignore[misc]
+async def test_create_and_get_templates(template_service: TemplateService) -> None:
     tenant_id = "tenant_alice"
     payload = MealTemplateCreate(
         name="Healthy Breakfast",
@@ -48,8 +48,8 @@ async def test_create_and_get_templates(template_service):
     assert all_templates[0].id == template.id
 
 
-@pytest.mark.asyncio
-async def test_tenant_isolation(template_service):
+@pytest.mark.asyncio  # type: ignore[misc]
+async def test_tenant_isolation(template_service: TemplateService) -> None:
     alice_payload = MealTemplateCreate(
         name="Alice Meal",
         entries=[
@@ -64,8 +64,8 @@ async def test_tenant_isolation(template_service):
     assert len(bob_templates) == 0
 
 
-@pytest.mark.asyncio
-async def test_delete_template(template_service):
+@pytest.mark.asyncio  # type: ignore[misc]
+async def test_delete_template(template_service: TemplateService) -> None:
     tenant_id = "tenant_alice"
     payload = MealTemplateCreate(
         name="To Delete",
@@ -84,8 +84,8 @@ async def test_delete_template(template_service):
     assert len(all_templates) == 0
 
 
-@pytest.mark.asyncio
-async def test_log_template(template_service, log_service):
+@pytest.mark.asyncio  # type: ignore[misc]
+async def test_log_template(template_service: TemplateService, log_service: MagicMock) -> None:
     tenant_id = "tenant_alice"
     payload = MealTemplateCreate(
         name="Log Me",

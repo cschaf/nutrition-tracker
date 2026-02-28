@@ -173,4 +173,25 @@ def get_export_service() -> ExportService:
     return ExportService()
 
 
+__all__ = [
+    "get_http_client",
+    "get_off_adapter",
+    "get_usda_adapter",
+    "get_manual_product_repository",
+    "get_manual_adapter",
+    "get_adapter_registry",
+    "get_product_service",
+    "get_barcode_service",
+    "get_product_cache",
+    "get_log_repository",
+    "get_notification_service",
+    "get_goals_repository",
+    "get_log_service",
+    "get_template_repository",
+    "get_template_service",
+    "get_goals_service",
+    "get_export_service",
+    "get_settings",
+]
+
 TenantIdDep = Annotated[str, Depends(get_settings)]  # wird in Endpoints via get_tenant_id genutzt

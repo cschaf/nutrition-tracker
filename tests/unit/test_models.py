@@ -46,7 +46,7 @@ def _make_product(
 # ---------------------------------------------------------------------------
 
 
-def test_scaled_macros_scales_proportionally():
+def test_scaled_macros_scales_proportionally() -> None:
     product = _make_product(calories="200", protein="10", carbs="30", fat="5")
     entry = LogEntry(
         tenant_id="alice",
@@ -61,7 +61,7 @@ def test_scaled_macros_scales_proportionally():
     assert scaled.fat_g == Decimal("2.50")
 
 
-def test_scaled_macros_optional_fields_none_when_product_has_none():
+def test_scaled_macros_optional_fields_none_when_product_has_none() -> None:
     product = _make_product(fiber=None, sugar=None)
     entry = LogEntry(tenant_id="alice", product=product, quantity_g=Decimal("100"))
 
@@ -70,7 +70,7 @@ def test_scaled_macros_optional_fields_none_when_product_has_none():
     assert scaled.sugar_g is None
 
 
-def test_scaled_macros_optional_fields_scaled_when_present():
+def test_scaled_macros_optional_fields_scaled_when_present() -> None:
     product = _make_product(fiber="4", sugar="8")
     entry = LogEntry(tenant_id="alice", product=product, quantity_g=Decimal("200"))
 
@@ -79,7 +79,7 @@ def test_scaled_macros_optional_fields_scaled_when_present():
     assert scaled.sugar_g == Decimal("16.00")
 
 
-def test_scaled_macros_zero_optional_fields_not_lost():
+def test_scaled_macros_zero_optional_fields_not_lost() -> None:
     """Decimal('0') is falsy — ensure zero optional fields are preserved."""
     product = _make_product(fiber="0", sugar="0")
     entry = LogEntry(tenant_id="alice", product=product, quantity_g=Decimal("100"))
@@ -94,7 +94,7 @@ def test_scaled_macros_zero_optional_fields_not_lost():
 # ---------------------------------------------------------------------------
 
 
-def test_consumed_volume_ml_for_liquid():
+def test_consumed_volume_ml_for_liquid() -> None:
     product = _make_product(is_liquid=True)
     entry = LogEntry(tenant_id="alice", product=product, quantity_g=Decimal("250"))
 
@@ -102,7 +102,7 @@ def test_consumed_volume_ml_for_liquid():
     assert entry.consumed_volume_ml == Decimal("250.0")
 
 
-def test_consumed_volume_ml_for_non_liquid_is_none():
+def test_consumed_volume_ml_for_non_liquid_is_none() -> None:
     product = _make_product(is_liquid=False)
     entry = LogEntry(tenant_id="alice", product=product, quantity_g=Decimal("100"))
 
@@ -114,7 +114,7 @@ def test_consumed_volume_ml_for_non_liquid_is_none():
 # ---------------------------------------------------------------------------
 
 
-def test_generalized_product_liquid_without_volume_raises():
+def test_generalized_product_liquid_without_volume_raises() -> None:
     with pytest.raises(ValueError, match="volume_ml_per_100g"):
         GeneralizedProduct(
             id="p1",
@@ -131,7 +131,7 @@ def test_generalized_product_liquid_without_volume_raises():
         )
 
 
-def test_generalized_product_non_liquid_without_volume_is_valid():
+def test_generalized_product_non_liquid_without_volume_is_valid() -> None:
     product = GeneralizedProduct(
         id="p1",
         source=DataSource.MANUAL,
@@ -152,7 +152,7 @@ def test_generalized_product_non_liquid_without_volume_is_valid():
 # ---------------------------------------------------------------------------
 
 
-def test_manual_product_create_liquid_without_volume_raises():
+def test_manual_product_create_liquid_without_volume_raises() -> None:
     with pytest.raises(ValueError, match="volume_ml_per_100g"):
         ManualProductCreate(
             name="Juice",
@@ -167,7 +167,7 @@ def test_manual_product_create_liquid_without_volume_raises():
         )
 
 
-def test_manual_product_create_liquid_with_volume_is_valid():
+def test_manual_product_create_liquid_with_volume_is_valid() -> None:
     product = ManualProductCreate(
         name="Homemade Lemonade",
         macronutrients=Macronutrients(
@@ -187,23 +187,23 @@ def test_manual_product_create_liquid_with_volume_is_valid():
 # ---------------------------------------------------------------------------
 
 
-def test_date_range_params_valid():
+def test_date_range_params_valid() -> None:
     dr = DateRangeParams(start_date=date(2025, 1, 1), end_date=date(2025, 1, 31))
     assert dr.start_date == date(2025, 1, 1)
     assert dr.end_date == date(2025, 1, 31)
 
 
-def test_date_range_params_same_day_valid():
+def test_date_range_params_same_day_valid() -> None:
     dr = DateRangeParams(start_date=date(2025, 6, 15), end_date=date(2025, 6, 15))
     assert dr.start_date == dr.end_date
 
 
-def test_date_range_params_end_before_start_raises():
+def test_date_range_params_end_before_start_raises() -> None:
     with pytest.raises(ValueError, match="after or equal"):
         DateRangeParams(start_date=date(2025, 2, 1), end_date=date(2025, 1, 1))
 
 
-def test_date_range_params_too_long_raises():
+def test_date_range_params_too_long_raises() -> None:
     with pytest.raises(ValueError, match="366 days"):
         DateRangeParams(start_date=date(2024, 1, 1), end_date=date(2025, 2, 2))
 
@@ -213,7 +213,7 @@ def test_date_range_params_too_long_raises():
 # ---------------------------------------------------------------------------
 
 
-def test_macronutrients_are_frozen():
+def test_macronutrients_are_frozen() -> None:
     macros = Macronutrients(
         calories_kcal=Decimal("100"),
         protein_g=Decimal("5"),
@@ -221,10 +221,10 @@ def test_macronutrients_are_frozen():
         fat_g=Decimal("3"),
     )
     with pytest.raises(Exception):
-        macros.calories_kcal = Decimal("999")  # type: ignore[misc]
+        macros.calories_kcal = Decimal("999")
 
 
-def test_micronutrients_default_all_none():
+def test_micronutrients_default_all_none() -> None:
     micros = Micronutrients()
     assert micros.sodium_mg is None
     assert micros.potassium_mg is None

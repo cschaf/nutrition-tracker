@@ -8,8 +8,8 @@ from app.domain.models import DataSource, GeneralizedProduct, Macronutrients, Mi
 from app.main import app
 
 
-@pytest.fixture
-def mock_generalized_product():
+@pytest.fixture  # type: ignore[misc]
+def mock_generalized_product() -> GeneralizedProduct:
     return GeneralizedProduct(
         id="test-product-123",
         source=DataSource.MANUAL,
@@ -26,7 +26,9 @@ def mock_generalized_product():
     )
 
 
-def test_create_log_entry_success(client: TestClient, mock_generalized_product: GeneralizedProduct):
+def test_create_log_entry_success(
+    client: TestClient, mock_generalized_product: GeneralizedProduct
+) -> None:
     # Mock den Service-Aufruf
     with patch(
         "app.services.log_service.LogService.create_entry", new_callable=AsyncMock
@@ -62,7 +64,7 @@ def test_create_log_entry_success(client: TestClient, mock_generalized_product: 
             app.dependency_overrides.clear()
 
 
-def test_get_daily_log_empty(client: TestClient):
+def test_get_daily_log_empty(client: TestClient) -> None:
     from app.core.security import get_tenant_id
 
     app.dependency_overrides[get_tenant_id] = lambda: "tenant_alice"
@@ -74,13 +76,13 @@ def test_get_daily_log_empty(client: TestClient):
         app.dependency_overrides.clear()
 
 
-def test_health_check(client: TestClient):
+def test_health_check(client: TestClient) -> None:
     response = client.get("/healthz")
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
 
 
-def test_get_nutrition_range_success(client: TestClient):
+def test_get_nutrition_range_success(client: TestClient) -> None:
     from app.core.security import get_tenant_id
 
     app.dependency_overrides[get_tenant_id] = lambda: "tenant_alice"
@@ -115,7 +117,7 @@ def test_get_nutrition_range_success(client: TestClient):
             app.dependency_overrides.clear()
 
 
-def test_get_range_validation_error(client: TestClient):
+def test_get_range_validation_error(client: TestClient) -> None:
     from app.core.security import get_tenant_id
 
     app.dependency_overrides[get_tenant_id] = lambda: "tenant_alice"
@@ -140,7 +142,7 @@ def test_get_range_validation_error(client: TestClient):
         app.dependency_overrides.clear()
 
 
-def test_get_log_entry_not_found(client: TestClient):
+def test_get_log_entry_not_found(client: TestClient) -> None:
     from app.core.security import get_tenant_id
 
     app.dependency_overrides[get_tenant_id] = lambda: "tenant_alice"
@@ -154,12 +156,10 @@ def test_get_log_entry_not_found(client: TestClient):
         app.dependency_overrides.clear()
 
 
-def test_get_log_entry_success(client: TestClient):
+def test_get_log_entry_success(client: TestClient) -> None:
     from app.core.security import get_tenant_id
 
-    with patch(
-        "app.services.log_service.LogService.get_entry", new_callable=AsyncMock
-    ) as mock_get:
+    with patch("app.services.log_service.LogService.get_entry", new_callable=AsyncMock) as mock_get:
         mock_get.return_value = None  # start as not found
 
         app.dependency_overrides[get_tenant_id] = lambda: "tenant_alice"
@@ -173,7 +173,7 @@ def test_get_log_entry_success(client: TestClient):
             app.dependency_overrides.clear()
 
 
-def test_update_log_entry_not_found(client: TestClient):
+def test_update_log_entry_not_found(client: TestClient) -> None:
     from app.core.security import get_tenant_id
 
     app.dependency_overrides[get_tenant_id] = lambda: "tenant_alice"
@@ -190,7 +190,7 @@ def test_update_log_entry_not_found(client: TestClient):
 
 def test_update_log_entry_success(
     client: TestClient, mock_generalized_product: GeneralizedProduct
-):
+) -> None:
     from app.core.security import get_tenant_id
 
     updated_entry = {
@@ -222,7 +222,7 @@ def test_update_log_entry_success(
             app.dependency_overrides.clear()
 
 
-def test_delete_log_entry_not_found(client: TestClient):
+def test_delete_log_entry_not_found(client: TestClient) -> None:
     from app.core.security import get_tenant_id
 
     app.dependency_overrides[get_tenant_id] = lambda: "tenant_alice"
@@ -236,7 +236,7 @@ def test_delete_log_entry_not_found(client: TestClient):
         app.dependency_overrides.clear()
 
 
-def test_delete_log_entry_success(client: TestClient):
+def test_delete_log_entry_success(client: TestClient) -> None:
     from app.core.security import get_tenant_id
 
     with patch(
@@ -255,7 +255,7 @@ def test_delete_log_entry_success(client: TestClient):
             app.dependency_overrides.clear()
 
 
-def test_get_daily_nutrition_empty(client: TestClient):
+def test_get_daily_nutrition_empty(client: TestClient) -> None:
     from app.core.security import get_tenant_id
 
     app.dependency_overrides[get_tenant_id] = lambda: "tenant_alice"
@@ -269,7 +269,7 @@ def test_get_daily_nutrition_empty(client: TestClient):
         app.dependency_overrides.clear()
 
 
-def test_get_daily_hydration_empty(client: TestClient):
+def test_get_daily_hydration_empty(client: TestClient) -> None:
     from app.core.security import get_tenant_id
 
     app.dependency_overrides[get_tenant_id] = lambda: "tenant_alice"
@@ -283,7 +283,7 @@ def test_get_daily_hydration_empty(client: TestClient):
         app.dependency_overrides.clear()
 
 
-def test_get_hydration_range_success(client: TestClient):
+def test_get_hydration_range_success(client: TestClient) -> None:
     from app.core.security import get_tenant_id
 
     app.dependency_overrides[get_tenant_id] = lambda: "tenant_alice"
@@ -313,7 +313,7 @@ def test_get_hydration_range_success(client: TestClient):
             app.dependency_overrides.clear()
 
 
-def test_get_hydration_range_validation_error(client: TestClient):
+def test_get_hydration_range_validation_error(client: TestClient) -> None:
     from app.core.security import get_tenant_id
 
     app.dependency_overrides[get_tenant_id] = lambda: "tenant_alice"

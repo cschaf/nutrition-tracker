@@ -1,3 +1,5 @@
+from collections.abc import Generator
+from decimal import Decimal
 from unittest.mock import AsyncMock
 
 import pytest
@@ -7,8 +9,8 @@ from app.domain.models import DataSource, GeneralizedProduct, Macronutrients
 from app.main import app
 
 
-@pytest.fixture
-def mock_adapter_registry():
+@pytest.fixture  # type: ignore[misc]
+def mock_adapter_registry() -> Generator[dict[DataSource, AsyncMock], None, None]:
     off_adapter = AsyncMock()
     usda_adapter = AsyncMock()
     # We don't want the real search to be called because it uses the real httpx client
@@ -21,14 +23,21 @@ def mock_adapter_registry():
 
 
 def test_search_products_off_success(
-    client: TestClient, alice_headers: dict, mock_adapter_registry: dict
-):
+    client: TestClient,
+    alice_headers: dict[str, str],
+    mock_adapter_registry: dict[DataSource, AsyncMock],
+) -> None:
     # Setup
     mock_product = GeneralizedProduct(
         id="123",
         source=DataSource.OPEN_FOOD_FACTS,
         name="Test Product",
-        macronutrients=Macronutrients(calories_kcal=100, protein_g=10, carbohydrates_g=20, fat_g=5),
+        macronutrients=Macronutrients(
+            calories_kcal=Decimal("100"),
+            protein_g=Decimal("10"),
+            carbohydrates_g=Decimal("20"),
+            fat_g=Decimal("5"),
+        ),
     )
     off_adapter = mock_adapter_registry[DataSource.OPEN_FOOD_FACTS]
     off_adapter.search.return_value = [mock_product]
@@ -57,14 +66,21 @@ def test_search_products_off_success(
 
 
 def test_search_products_usda_success(
-    client: TestClient, alice_headers: dict, mock_adapter_registry: dict
-):
+    client: TestClient,
+    alice_headers: dict[str, str],
+    mock_adapter_registry: dict[DataSource, AsyncMock],
+) -> None:
     # Setup
     mock_product = GeneralizedProduct(
         id="456",
         source=DataSource.USDA_FOODDATA,
         name="USDA Product",
-        macronutrients=Macronutrients(calories_kcal=200, protein_g=5, carbohydrates_g=40, fat_g=2),
+        macronutrients=Macronutrients(
+            calories_kcal=Decimal("200"),
+            protein_g=Decimal("5"),
+            carbohydrates_g=Decimal("40"),
+            fat_g=Decimal("2"),
+        ),
     )
     usda_adapter = mock_adapter_registry[DataSource.USDA_FOODDATA]
     usda_adapter.search.return_value = [mock_product]
@@ -92,7 +108,7 @@ def test_search_products_usda_success(
         app.dependency_overrides.clear()
 
 
-def test_search_products_invalid_source(client: TestClient, alice_headers: dict):
+def test_search_products_invalid_source(client: TestClient, alice_headers: dict[str, str]) -> None:
     from app.core.security import get_tenant_id
 
     app.dependency_overrides[get_tenant_id] = lambda: "tenant_alice"
@@ -107,8 +123,10 @@ def test_search_products_invalid_source(client: TestClient, alice_headers: dict)
 
 
 def test_search_products_unsupported_source_for_search(
-    client: TestClient, alice_headers: dict, mock_adapter_registry: dict
-):
+    client: TestClient,
+    alice_headers: dict[str, str],
+    mock_adapter_registry: dict[DataSource, AsyncMock],
+) -> None:
     from app.core.security import get_tenant_id
 
     app.dependency_overrides[get_tenant_id] = lambda: "tenant_alice"
@@ -131,15 +149,17 @@ def test_search_products_unsupported_source_for_search(
         app.dependency_overrides.clear()
 
 
-def test_search_products_unauthorized(client: TestClient):
+def test_search_products_unauthorized(client: TestClient) -> None:
     # No dependency override here to test real security
     response = client.get("/api/v1/products/search?q=apple&source=open_food_facts")
     assert response.status_code == 401
 
 
 def test_search_products_external_api_error(
-    client: TestClient, alice_headers: dict, mock_adapter_registry: dict
-):
+    client: TestClient,
+    alice_headers: dict[str, str],
+    mock_adapter_registry: dict[DataSource, AsyncMock],
+) -> None:
     from app.api.dependencies import get_adapter_registry
     from app.core.security import get_tenant_id
     from app.domain.ports import ExternalApiError
@@ -160,7 +180,9 @@ def test_search_products_external_api_error(
         app.dependency_overrides.clear()
 
 
-def test_search_products_limit_validation(client: TestClient, alice_headers: dict):
+def test_search_products_limit_validation(
+    client: TestClient, alice_headers: dict[str, str]
+) -> None:
     from app.core.security import get_tenant_id
 
     app.dependency_overrides[get_tenant_id] = lambda: "tenant_alice"
@@ -180,7 +202,7 @@ def test_search_products_limit_validation(client: TestClient, alice_headers: dic
         app.dependency_overrides.clear()
 
 
-def test_create_manual_product_success(client: TestClient, alice_headers: dict):
+def test_create_manual_product_success(client: TestClient, alice_headers: dict[str, str]) -> None:
     from app.core.security import get_tenant_id
 
     app.dependency_overrides[get_tenant_id] = lambda: "tenant_alice"
@@ -227,7 +249,9 @@ def test_create_manual_product_success(client: TestClient, alice_headers: dict):
         app.dependency_overrides.clear()
 
 
-def test_create_manual_liquid_product_validation(client: TestClient, alice_headers: dict):
+def test_create_manual_liquid_product_validation(
+    client: TestClient, alice_headers: dict[str, str]
+) -> None:
     from app.core.security import get_tenant_id
 
     app.dependency_overrides[get_tenant_id] = lambda: "tenant_alice"
@@ -258,23 +282,28 @@ def test_barcode_lookup_success(client: TestClient, alice_headers: dict[str, str
         source=DataSource.OPEN_FOOD_FACTS,
         name="Test Water",
         macronutrients=Macronutrients(
-            calories_kcal="0", protein_g="0", carbohydrates_g="0", fat_g="0"
+            calories_kcal=Decimal("0"),
+            protein_g=Decimal("0"),
+            carbohydrates_g=Decimal("0"),
+            fat_g=Decimal("0"),
         ),
     )
 
     mock_off = AsyncMock()
     mock_off.fetch_by_id.return_value = mock_product
 
-    from app.api.dependencies import get_adapter_registry, get_settings
+    from app.api import dependencies as deps
     from app.core.config import Settings
     from app.core.security import get_tenant_id
 
     # Dependency Overrides
     app.dependency_overrides[get_tenant_id] = lambda: "tenant_alice"
-    app.dependency_overrides[get_settings] = lambda: Settings(
+    app.dependency_overrides[deps.get_settings] = lambda: Settings(
         api_keys={"test-key-alice": "tenant_alice"}
     )
-    app.dependency_overrides[get_adapter_registry] = lambda: {DataSource.OPEN_FOOD_FACTS: mock_off}
+    app.dependency_overrides[deps.get_adapter_registry] = lambda: {
+        DataSource.OPEN_FOOD_FACTS: mock_off
+    }
 
     try:
         response = client.get("/api/v1/products/barcode/4000617011536", headers=alice_headers)
@@ -293,15 +322,17 @@ def test_barcode_lookup_not_found(client: TestClient, alice_headers: dict[str, s
 
     mock_off.fetch_by_id.side_effect = ProductNotFoundError("999", "open_food_facts")
 
-    from app.api.dependencies import get_adapter_registry, get_settings
+    from app.api import dependencies as deps
     from app.core.config import Settings
     from app.core.security import get_tenant_id
 
     app.dependency_overrides[get_tenant_id] = lambda: "tenant_alice"
-    app.dependency_overrides[get_settings] = lambda: Settings(
+    app.dependency_overrides[deps.get_settings] = lambda: Settings(
         api_keys={"test-key-alice": "tenant_alice"}
     )
-    app.dependency_overrides[get_adapter_registry] = lambda: {DataSource.OPEN_FOOD_FACTS: mock_off}
+    app.dependency_overrides[deps.get_adapter_registry] = lambda: {
+        DataSource.OPEN_FOOD_FACTS: mock_off
+    }
 
     try:
         response = client.get("/api/v1/products/barcode/999", headers=alice_headers)
