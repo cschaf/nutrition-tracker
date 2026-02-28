@@ -3,7 +3,7 @@
 > A cloud-native, multi-tenant REST API for tracking daily nutrition and hydration intake.
 > Built with FastAPI, Python 3.12, and designed for Kubernetes/Homelab deployment via FluxCD.
 
-[![CI Pipeline](https://img.shields.io/github/actions/workflow/status/your-org/nutrition-tracker/ci.yml?label=CI&logo=github)](/.github/workflows/ci.yml)
+[![CI Pipeline](https://img.shields.io/github/actions/workflow/status/cschaf/nutrition-tracker/ci.yml?label=CI&logo=github)](/.github/workflows/ci.yml)
 [![Helm Lint](https://img.shields.io/badge/helm-lint%20passing-blue?logo=helm)](deploy/charts/nutrition-tracker)
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue?logo=python)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.111+-green?logo=fastapi)](https://fastapi.tiangolo.com)
@@ -987,40 +987,64 @@ Schritte:
 ```
 Du arbeitest am Projekt "Nutrition & Hydration Tracking API".
 Lies zuerst AGENTS.md vollständig (insbesondere Abschnitt 4a und 5.4),
-dann src/app/services/log_service.py und src/app/api/v1/logs.py.
+dann src/app/services/log_service.py, src/app/domain/models.py
+und src/app/api/v1/logs.py.
 
 Implementiere einen CSV-Export-Endpoint.
 
-KRITISCH — Query-Parameter Alias-Problem (identisch zu Prompt 4):
+KRITISCH 1 — Query-Parameter Alias-Problem (identisch zu Prompt 4):
 from_date: date = Query(..., alias="from") direkt am Endpoint — nie via Depends(Model).
+
+KRITISCH 2 — Decimal("0") Truthiness-Problem (siehe AGENTS.md 4a.9):
+Alle optionalen Decimal-Felder (fiber_g, sugar_g, sodium_mg etc.) mit "is not None"
+prüfen — nie mit bloßem "if value". Decimal("0") ist falsy und würde sonst als
+leerer String in der CSV erscheinen statt als "0.00".
+Falsch:  fiber_g=(m.fiber_g * factor) if m.fiber_g else None
+Richtig: fiber_g=(m.fiber_g * factor) if m.fiber_g is not None else None
+Prüfe src/app/domain/models.py → scaled_macros und consumed_volume_ml
+auf dieses Muster und korrigiere alle betroffenen Stellen vor der Implementierung.
+
+KRITISCH 3 — Keine DB-Dateien committen:
+Stelle sicher dass *.db und nutrition_tracker.db in .gitignore stehen.
+Falls nutrition_tracker.db bereits getrackt wird:
+  git rm --cached nutrition_tracker.db
+und dann .gitignore ergänzen.
 
 Technische Vorgaben:
 - StreamingResponse mit io.StringIO als Generator
 - csv-Modul aus stdlib — keine externe Dependency
 - Alle Typannotierungen vollständig für mypy --strict
+- Nullwerte (0.00) erscheinen als "0.00" in der CSV, nicht als leerer String
 
 Schritte:
-1. Erstelle src/app/services/export_service.py:
+1. Prüfe und korrigiere src/app/domain/models.py:
+   In scaled_macros: alle "if m.field" → "if m.field is not None"
+   In consumed_volume_ml: gleiches Muster
+2. Erstelle src/app/services/export_service.py:
    class ExportService mit generate_csv(entries: list[LogEntry]) -> Iterator[str]
    Nutzt csv.writer mit io.StringIO.
    CSV-Spalten: date, time, product_name, brand, source, quantity_g,
    calories_kcal, protein_g, carbohydrates_g, fat_g, fiber_g, sugar_g,
    is_liquid, volume_ml, note
-   Erste Zeile: Header. Werte aus entry.scaled_macros und entry.consumed_volume_ml.
-2. Ergänze get_export_service() in src/app/api/dependencies.py.
-3. GET /api/v1/logs/export in src/app/api/v1/logs.py:
+   Fehlende optionale Felder als "0.00" ausgeben, nicht als leeren String.
+   Erste Zeile: Header.
+3. Ergänze get_export_service() in src/app/api/dependencies.py.
+4. GET /api/v1/logs/export in src/app/api/v1/logs.py:
    Parameter direkt am Endpoint:
      from_date: date = Query(..., alias="from")
      to_date: date = Query(..., alias="to")
    Validierung: from_date <= to_date, max. 366 Tage.
    Response: StreamingResponse(content=..., media_type="text/csv")
    Header: Content-Disposition: attachment; filename="nutrition_<from>_<to>.csv"
-4. Schreibe tests/unit/test_export_service.py:
-   - Prüfe Header-Zeile
-   - Prüfe korrekte Berechnung von scaled_macros in der CSV-Ausgabe
-5. Schreibe Integrationstest: Response-Status 200, Content-Type text/csv,
+5. Schreibe tests/unit/test_export_service.py:
+   - test_header_row: erste CSV-Zeile enthält alle erwarteten Spalten
+   - test_zero_nutrients_appear_as_zero: fiber_g=Decimal("0") → "0.00" in CSV
+   - test_none_nutrients_appear_as_zero: fiber_g=None → "0.00" in CSV
+   - test_scaled_macros_calculation: quantity_g=200 → Werte korrekt skaliert
+6. Schreibe Integrationstest: Response-Status 200, Content-Type text/csv,
    Content-Disposition Header vorhanden.
-6. Stelle sicher:
+7. Stelle sicher:
+   - *.db in .gitignore, git rm --cached falls nötig
    - ruff check src/ tests/ gibt 0 Fehler
    - mypy src/app --strict gibt 0 Fehler
    - pytest läuft durch

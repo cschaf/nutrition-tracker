@@ -388,6 +388,24 @@ app.add_exception_handler(
 
 Only use `# type: ignore` for genuinely incompatible third-party signatures. Never use it to silence errors in your own code.
 
+### 4a.9 Never use truthiness checks on `Decimal` values — always check `is not None`
+
+`Decimal("0")` is falsy in Python. A truthiness check `if m.fiber_g` evaluates to `False` when the value is zero, incorrectly treating a legitimate zero nutrient value as absent. This causes zero values to silently disappear from CSV exports, API responses, and daily totals.
+
+```python
+# ❌ WRONG — Decimal("0") is falsy, zero values are lost
+fiber_g=(m.fiber_g * factor).quantize(Decimal("0.01")) if m.fiber_g else None,
+sugar_g=(m.sugar_g * factor).quantize(Decimal("0.01")) if m.sugar_g else None,
+
+# ✅ CORRECT — explicit None check preserves zero values
+fiber_g=(m.fiber_g * factor).quantize(Decimal("0.01")) if m.fiber_g is not None else None,
+sugar_g=(m.sugar_g * factor).quantize(Decimal("0.01")) if m.sugar_g is not None else None,
+```
+
+**Rule:** For any `Decimal | None` field, always use `if value is not None` — never bare `if value`. This applies to `scaled_macros`, `consumed_volume_ml`, and all nutrient fields throughout the codebase.
+
+The same rule applies to `int | None` and `float | None` fields where zero is a valid value.
+
 ---
 
 ## 5. Testing Requirements
@@ -680,3 +698,6 @@ git push --tags
 | Add `= None` default to FastAPI `Annotated` deps | Implicit Optional breaks mypy strict |
 | Leave test files empty or with no test functions | pytest exits with code 5, CI fails |
 | Use `# type: ignore` in your own code | Only allowed for third-party signature mismatches |
+| Use `if value` on `Decimal \| None` fields | `Decimal("0")` is falsy — zero values silently disappear |
+| Commit `*.db` files | Generated runtime files do not belong in version control |
+| Use `if value` truthiness on any nullable numeric field | Zero is a valid value for `int \| None` and `float \| None` too |
