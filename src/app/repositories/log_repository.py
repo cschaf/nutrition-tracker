@@ -26,9 +26,15 @@ class InMemoryLogRepository(AbstractLogRepository):
         return self._store[tenant_id].get(entry_id)
 
     async def find_by_date(self, tenant_id: str, log_date: date) -> list[LogEntry]:
+        return [e for e in self._store[tenant_id].values() if e.log_date == log_date]
+
+    async def find_by_date_range(
+        self, tenant_id: str, start_date: date, end_date: date
+    ) -> list[LogEntry]:
         return [
-            e for e in self._store[tenant_id].values()
-            if e.log_date == log_date
+            e
+            for e in self._store[tenant_id].values()
+            if start_date <= e.log_date <= end_date
         ]
 
     async def delete(self, tenant_id: str, entry_id: str) -> bool:

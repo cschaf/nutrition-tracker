@@ -1,7 +1,7 @@
 # src/app/services/log_service.py
 from __future__ import annotations
 
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
 from app.domain.models import (
@@ -70,7 +70,49 @@ class LogService:
 
     async def get_daily_nutrition(self, tenant_id: str, log_date: date) -> DailyNutritionSummary:
         entries = await self._repo.find_by_date(tenant_id, log_date)
+        return self._summarize_nutrition(log_date, entries)
 
+    async def get_daily_hydration(self, tenant_id: str, log_date: date) -> DailyHydrationSummary:
+        entries = await self._repo.find_by_date(tenant_id, log_date)
+        return self._summarize_hydration(log_date, entries)
+
+    async def get_nutrition_range(
+        self, tenant_id: str, start_date: date, end_date: date
+    ) -> list[DailyNutritionSummary]:
+        all_entries = await self._repo.find_by_date_range(tenant_id, start_date, end_date)
+        entries_by_date = self._group_by_date(all_entries)
+
+        summaries = []
+        curr = start_date
+        while curr <= end_date:
+            day_entries = entries_by_date.get(curr, [])
+            summaries.append(self._summarize_nutrition(curr, day_entries))
+            curr += timedelta(days=1)
+        return summaries
+
+    async def get_hydration_range(
+        self, tenant_id: str, start_date: date, end_date: date
+    ) -> list[DailyHydrationSummary]:
+        all_entries = await self._repo.find_by_date_range(tenant_id, start_date, end_date)
+        entries_by_date = self._group_by_date(all_entries)
+
+        summaries = []
+        curr = start_date
+        while curr <= end_date:
+            day_entries = entries_by_date.get(curr, [])
+            summaries.append(self._summarize_hydration(curr, day_entries))
+            curr += timedelta(days=1)
+        return summaries
+
+    def _group_by_date(self, entries: list[LogEntry]) -> dict[date, list[LogEntry]]:
+        grouped: dict[date, list[LogEntry]] = {}
+        for e in entries:
+            grouped.setdefault(e.log_date, []).append(e)
+        return grouped
+
+    def _summarize_nutrition(
+        self, log_date: date, entries: list[LogEntry]
+    ) -> DailyNutritionSummary:
         def _sum_field(field: str) -> Decimal:
             total = Decimal("0")
             for e in entries:
@@ -89,8 +131,9 @@ class LogService:
         )
         return DailyNutritionSummary(log_date=log_date, total_entries=len(entries), totals=totals)
 
-    async def get_daily_hydration(self, tenant_id: str, log_date: date) -> DailyHydrationSummary:
-        entries = await self._repo.find_by_date(tenant_id, log_date)
+    def _summarize_hydration(
+        self, log_date: date, entries: list[LogEntry]
+    ) -> DailyHydrationSummary:
         liquid_entries = [e for e in entries if e.product.is_liquid]
         total_ml = sum(
             (e.consumed_volume_ml for e in liquid_entries if e.consumed_volume_ml),

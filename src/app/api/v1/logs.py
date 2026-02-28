@@ -2,13 +2,14 @@
 from datetime import UTC, date, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Security, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Security, status
 
 from app.api.dependencies import get_log_service
 from app.core.security import get_tenant_id
 from app.domain.models import (
     DailyHydrationSummary,
     DailyNutritionSummary,
+    DateRangeParams,
     LogEntry,
     LogEntryCreate,
     LogEntryUpdate,
@@ -85,3 +86,38 @@ async def get_daily_hydration(
 ) -> DailyHydrationSummary:
     target = log_date or datetime.now(UTC).date()
     return await service.get_daily_hydration(tenant_id=tenant_id, log_date=target)
+
+
+@router.get("/range/nutrition", response_model=list[DailyNutritionSummary])
+async def get_nutrition_range(
+    tenant_id: TenantDep,
+    service: ServiceDep,
+    from_date: date = Query(..., alias="from"),
+    to_date: date = Query(..., alias="to"),
+) -> list[DailyNutritionSummary]:
+    try:
+        dr = DateRangeParams(start_date=from_date, end_date=to_date)
+    except ValueError as e:
+        # Map to 400 as per common practice for range errors, or 422 if strict
+        raise HTTPException(status_code=400, detail=str(e))
+
+    return await service.get_nutrition_range(
+        tenant_id=tenant_id, start_date=dr.start_date, end_date=dr.end_date
+    )
+
+
+@router.get("/range/hydration", response_model=list[DailyHydrationSummary])
+async def get_hydration_range(
+    tenant_id: TenantDep,
+    service: ServiceDep,
+    from_date: date = Query(..., alias="from"),
+    to_date: date = Query(..., alias="to"),
+) -> list[DailyHydrationSummary]:
+    try:
+        dr = DateRangeParams(start_date=from_date, end_date=to_date)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    return await service.get_hydration_range(
+        tenant_id=tenant_id, start_date=dr.start_date, end_date=dr.end_date
+    )
