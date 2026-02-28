@@ -140,7 +140,6 @@ def test_generate_csv_zero_values() -> None:
     row = next(csv_gen)
 
     expected_row = (
-        "2024-05-20,10:00:00,Zero Product,,manual,100,0.00,0.00,"
-        "0.00,0.00,0.00,0.00,true,0.0,\r\n"
+        "2024-05-20,10:00:00,Zero Product,,manual,100,0.00,0.00,0.00,0.00,0.00,0.00,true,0.0,\r\n"
     )
     assert row == expected_row

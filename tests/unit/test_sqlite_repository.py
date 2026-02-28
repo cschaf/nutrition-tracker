@@ -16,6 +16,7 @@ async def sqlite_repo():
     await repo.initialize()
     return repo
 
+
 def create_test_entry(tenant_id: str, entry_id: str = None) -> LogEntry:
     return LogEntry(
         id=entry_id or str(uuid.uuid4()),
@@ -29,12 +30,13 @@ def create_test_entry(tenant_id: str, entry_id: str = None) -> LogEntry:
                 calories_kcal=Decimal("100"),
                 protein_g=Decimal("10"),
                 carbohydrates_g=Decimal("20"),
-                fat_g=Decimal("5")
-            )
+                fat_g=Decimal("5"),
+            ),
         ),
         quantity_g=Decimal("100"),
-        consumed_at=datetime.now(UTC)
+        consumed_at=datetime.now(UTC),
     )
+
 
 @pytest.mark.asyncio
 async def test_save_and_find_by_id(sqlite_repo):
@@ -49,6 +51,7 @@ async def test_save_and_find_by_id(sqlite_repo):
     assert found.tenant_id == tenant_id
     assert found.product.name == "Test Product"
 
+
 @pytest.mark.asyncio
 async def test_find_by_id_wrong_tenant(sqlite_repo):
     entry = create_test_entry("alice")
@@ -56,6 +59,7 @@ async def test_find_by_id_wrong_tenant(sqlite_repo):
 
     found = await sqlite_repo.find_by_id("bob", entry.id)
     assert found is None
+
 
 @pytest.mark.asyncio
 async def test_find_by_date(sqlite_repo):
@@ -75,6 +79,7 @@ async def test_find_by_date(sqlite_repo):
     assert len(entries_21) == 1
     assert entries_21[0].id == entry2.id
 
+
 @pytest.mark.asyncio
 async def test_delete(sqlite_repo):
     tenant_id = "alice"
@@ -87,10 +92,12 @@ async def test_delete(sqlite_repo):
     found = await sqlite_repo.find_by_id(tenant_id, entry.id)
     assert found is None
 
+
 @pytest.mark.asyncio
 async def test_delete_nonexistent(sqlite_repo):
     deleted = await sqlite_repo.delete("alice", "nonexistent")
     assert deleted is False
+
 
 @pytest.mark.asyncio
 async def test_update(sqlite_repo):

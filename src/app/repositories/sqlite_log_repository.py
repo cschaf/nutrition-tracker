@@ -33,9 +33,7 @@ class LogEntryORM(Base):
 class SQLiteLogRepository(AbstractLogRepository):
     def __init__(self, database_url: str) -> None:
         self.engine = create_async_engine(database_url)
-        self.async_session_maker = async_sessionmaker(
-            self.engine, expire_on_commit=False
-        )
+        self.async_session_maker = async_sessionmaker(self.engine, expire_on_commit=False)
 
     async def initialize(self) -> None:
         async with self.engine.begin() as conn:

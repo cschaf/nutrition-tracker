@@ -16,23 +16,21 @@ _BASE_URL = "https://api.nal.usda.gov/fdc/v1"
 
 # USDA Nutrient Number Mapping
 _NUTRIENT_MAP: dict[str, dict[str, set[int] | Decimal]] = {
-    "calories":      {"ids": {1008}, "unit_factor": Decimal("1")},
-    "protein":       {"ids": {1003}, "unit_factor": Decimal("1")},
+    "calories": {"ids": {1008}, "unit_factor": Decimal("1")},
+    "protein": {"ids": {1003}, "unit_factor": Decimal("1")},
     "carbohydrates": {"ids": {1005}, "unit_factor": Decimal("1")},
-    "fat":           {"ids": {1004}, "unit_factor": Decimal("1")},
-    "fiber":         {"ids": {1079}, "unit_factor": Decimal("1")},
-    "sugar":         {"ids": {2000}, "unit_factor": Decimal("1")},
-    "sodium":        {"ids": {1093}, "unit_factor": Decimal("1")},    # in mg
-    "potassium":     {"ids": {1092}, "unit_factor": Decimal("1")},    # in mg
-    "calcium":       {"ids": {1087}, "unit_factor": Decimal("1")},    # in mg
-    "iron":          {"ids": {1089}, "unit_factor": Decimal("1")},    # in mg
-    "vitamin_c":     {"ids": {1162}, "unit_factor": Decimal("1")},    # in mg
-    "vitamin_d":     {"ids": {1110}, "unit_factor": Decimal("1")},    # in µg
+    "fat": {"ids": {1004}, "unit_factor": Decimal("1")},
+    "fiber": {"ids": {1079}, "unit_factor": Decimal("1")},
+    "sugar": {"ids": {2000}, "unit_factor": Decimal("1")},
+    "sodium": {"ids": {1093}, "unit_factor": Decimal("1")},  # in mg
+    "potassium": {"ids": {1092}, "unit_factor": Decimal("1")},  # in mg
+    "calcium": {"ids": {1087}, "unit_factor": Decimal("1")},  # in mg
+    "iron": {"ids": {1089}, "unit_factor": Decimal("1")},  # in mg
+    "vitamin_c": {"ids": {1162}, "unit_factor": Decimal("1")},  # in mg
+    "vitamin_d": {"ids": {1110}, "unit_factor": Decimal("1")},  # in µg
 }
 
-_LIQUID_FOOD_CATEGORIES = frozenset({
-    "Beverages", "Soups, Sauces, and Gravies"
-})
+_LIQUID_FOOD_CATEGORIES = frozenset({"Beverages", "Soups, Sauces, and Gravies"})
 
 
 class _UsdaNutrient(BaseModel):
@@ -69,9 +67,7 @@ class UsdaFoodDataAdapter(ProductSourcePort):
         url = f"{_BASE_URL}/food/{product_id}"
         params: dict[str, str | int] = {"api_key": self._api_key}
         try:
-            response = await self._client.get(
-                url, params=params, timeout=10.0
-            )
+            response = await self._client.get(url, params=params, timeout=10.0)
             if response.status_code == 404:
                 raise ProductNotFoundError(product_id, "usda_fooddata")
             response.raise_for_status()
@@ -118,14 +114,18 @@ class UsdaFoodDataAdapter(ProductSourcePort):
         )
 
         has_micros = any(k in nutrient_values for k in ("sodium", "potassium", "calcium", "iron"))
-        micros = Micronutrients(
-            sodium_mg=nutrient_values.get("sodium"),
-            potassium_mg=nutrient_values.get("potassium"),
-            calcium_mg=nutrient_values.get("calcium"),
-            iron_mg=nutrient_values.get("iron"),
-            vitamin_c_mg=nutrient_values.get("vitamin_c"),
-            vitamin_d_ug=nutrient_values.get("vitamin_d"),
-        ) if has_micros else None
+        micros = (
+            Micronutrients(
+                sodium_mg=nutrient_values.get("sodium"),
+                potassium_mg=nutrient_values.get("potassium"),
+                calcium_mg=nutrient_values.get("calcium"),
+                iron_mg=nutrient_values.get("iron"),
+                vitamin_c_mg=nutrient_values.get("vitamin_c"),
+                vitamin_d_ug=nutrient_values.get("vitamin_d"),
+            )
+            if has_micros
+            else None
+        )
 
         return GeneralizedProduct(
             id=str(raw.fdc_id),

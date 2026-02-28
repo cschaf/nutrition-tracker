@@ -15,11 +15,13 @@ from app.repositories.base import AbstractLogRepository
 from app.repositories.goals_repository import GoalsRepository
 from app.repositories.manual_product_repository import ManualProductRepository
 from app.repositories.sqlite_log_repository import SQLiteLogRepository
+from app.repositories.template_repository import TemplateRepository
 from app.services.export_service import ExportService
 from app.services.goals_service import GoalsService
 from app.services.log_service import LogService
 from app.services.product_cache import ProductCache
 from app.services.product_service import ProductService
+from app.services.template_service import TemplateService
 
 
 # Shared HTTP Client (Connection Pooling)
@@ -121,6 +123,18 @@ def get_log_service(
 @lru_cache
 def get_goals_repository() -> GoalsRepository:
     return GoalsRepository()
+
+
+@lru_cache
+def get_template_repository() -> TemplateRepository:
+    return TemplateRepository()
+
+
+def get_template_service(
+    repository: TemplateRepository = Depends(get_template_repository),
+    log_service: LogService = Depends(get_log_service),
+) -> TemplateService:
+    return TemplateService(repository=repository, log_service=log_service)
 
 
 def get_goals_service(
