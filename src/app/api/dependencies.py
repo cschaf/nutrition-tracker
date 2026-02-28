@@ -20,6 +20,7 @@ from app.services.barcode_service import BarcodeService
 from app.services.export_service import ExportService
 from app.services.goals_service import GoalsService
 from app.services.log_service import LogService
+from app.services.notification_service import NotificationService
 from app.services.product_cache import ProductCache
 from app.services.product_service import ProductService
 from app.services.template_service import TemplateService
@@ -121,19 +122,32 @@ async def get_log_repository(
     return _repository
 
 
-def get_log_service(
-    adapter_registry: dict[DataSource, ProductSourcePort] = Depends(get_adapter_registry),
-    repository: AbstractLogRepository = Depends(get_log_repository),
-    product_cache: ProductCache = Depends(get_product_cache),
-) -> LogService:
-    return LogService(
-        adapter_registry=adapter_registry, repository=repository, product_cache=product_cache
-    )
+def get_notification_service(
+    client: httpx.AsyncClient = Depends(get_http_client),
+    settings: Settings = Depends(get_settings),
+) -> NotificationService:
+    return NotificationService(http_client=client, settings=settings)
 
 
 @lru_cache
 def get_goals_repository() -> GoalsRepository:
     return GoalsRepository()
+
+
+def get_log_service(
+    adapter_registry: dict[DataSource, ProductSourcePort] = Depends(get_adapter_registry),
+    repository: AbstractLogRepository = Depends(get_log_repository),
+    product_cache: ProductCache = Depends(get_product_cache),
+    notification_service: NotificationService = Depends(get_notification_service),
+    goals_repository: GoalsRepository = Depends(get_goals_repository),
+) -> LogService:
+    return LogService(
+        adapter_registry=adapter_registry,
+        repository=repository,
+        product_cache=product_cache,
+        notification_service=notification_service,
+        goals_repository=goals_repository,
+    )
 
 
 @lru_cache

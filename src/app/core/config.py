@@ -30,10 +30,15 @@ class Settings(BaseSettings):
     # Caching
     cache_ttl_seconds: int = 3600
 
+    # Webhooks
+    webhook_url: str | None = None
+    webhook_enabled: bool = False
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
+        frozen=True,
     )
 
 
