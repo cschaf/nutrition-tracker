@@ -417,9 +417,21 @@ Every code change requires corresponding tests. No exceptions.
 | What you changed | Where to write tests |
 |---|---|
 | `adapters/` | `tests/unit/test_adapters.py` |
-| `services/` | `tests/unit/test_log_service.py` |
-| `api/v1/` | `tests/integration/test_api_logs.py` |
-| `domain/models.py` | `tests/unit/test_models.py` (create if needed) |
+| `services/log_service.py` | `tests/unit/test_log_service.py` |
+| `services/barcode_service.py` | `tests/unit/test_barcode_service.py` |
+| `services/export_service.py` | `tests/unit/test_export_service.py` |
+| `services/goals_service.py` | `tests/unit/test_goals_service.py` |
+| `services/notification_service.py` | `tests/unit/test_notification_service.py` |
+| `services/product_cache.py` | `tests/unit/test_product_cache.py` |
+| `services/template_service.py` | `tests/unit/test_template_service.py` |
+| `repositories/sqlite_log_repository.py` | `tests/unit/test_sqlite_repository.py` |
+| `api/v1/logs.py` | `tests/integration/test_api_logs.py` |
+| `api/v1/products.py` | `tests/integration/test_api_products.py` |
+| `api/v1/goals.py` | `tests/integration/test_api_goals.py` |
+| `api/v1/templates.py` | `tests/integration/test_api_templates.py` |
+| `api/v1/logs.py` (export) | `tests/integration/test_api_export.py` |
+| `domain/models.py` | `tests/unit/test_models.py` |
+| `core/metrics.py` | `tests/unit/test_metrics.py` |
 | New adapter | New `tests/unit/test_<adapter_name>.py` |
 
 ### 5.2 Unit Test Pattern — Always Mock HTTP
@@ -564,6 +576,51 @@ But prefer option 2 — always have at least the baseline HTTP tests above.
 | `adapters/` | 90% |
 | `api/` | 85% |
 
+### 5.6 FastAPI Test Isolation — `app.dependency_overrides` vs `unittest.mock.patch`
+
+**This is the most common source of hard-to-diagnose test failures in this project.**
+
+FastAPI captures `Depends()` function object references at **import time**, not at call time. When you call `unittest.mock.patch("app.core.config.get_settings", ...)`, you replace the name `get_settings` in the `app.core.config` module namespace — but FastAPI's DI system already holds a reference to the *original* function object. The patch is invisible to FastAPI.
+
+```python
+# ❌ BROKEN — FastAPI ignores this patch
+with patch("app.core.config.get_settings", return_value=test_settings):
+    response = client.get("/api/v1/logs/daily")
+    # FastAPI still calls the REAL get_settings → uses production DB
+```
+
+**The correct approach is `app.dependency_overrides`:**
+
+```python
+# ✅ CORRECT — FastAPI honours dependency_overrides
+from app.core.config import get_settings
+app.dependency_overrides[get_settings] = lambda: test_settings
+try:
+    response = client.get("/api/v1/logs/daily")
+finally:
+    app.dependency_overrides.pop(get_settings, None)
+```
+
+The `client` fixture in `tests/conftest.py` already handles `get_settings` override correctly. For per-test overrides of other dependencies (e.g. `get_tenant_id`), always use the same pattern:
+
+```python
+from app.core.security import get_tenant_id
+
+app.dependency_overrides[get_tenant_id] = lambda: "tenant_alice"
+try:
+    response = client.get("/api/v1/logs/daily", headers={"X-API-Key": "any"})
+    assert response.status_code == 200
+finally:
+    app.dependency_overrides.clear()
+```
+
+**Rules:**
+
+1. Use `app.dependency_overrides[fn] = lambda: value` to replace any FastAPI `Depends()` or `Security()` dependency in tests.
+2. Always restore in a `finally` block (`app.dependency_overrides.clear()` or `.pop(fn, None)`).
+3. Use `unittest.mock.patch` only for **service method** patching (e.g. `patch("app.services.log_service.LogService.get_entry", ...)`), not for FastAPI dependency functions.
+4. The `_repository` singleton in `app.api.dependencies` must be reset (`_deps._repository = None`) before and after each test that uses a real repository — the `client` fixture already does this.
+
 ---
 
 ## 6. Adding a New External Data Source (Step-by-Step)
@@ -602,21 +659,33 @@ But prefer option 2 — always have at least the baseline HTTP tests above.
 
 ---
 
-## 8. Replacing the Repository (Persistence Upgrade)
+## 8. Repository Layer (Persistence)
 
-The current `InMemoryLogRepository` loses all data on restart. To add persistence:
+The project ships with **SQLite as the default** (`SQLiteLogRepository` in `repositories/sqlite_log_repository.py`). `InMemoryLogRepository` is kept for unit tests only.
 
-1. Create `src/app/repositories/sqlite_log_repository.py` (or postgres)
-2. Implement the same method signatures:
-   ```python
-   def save(self, entry: LogEntry) -> LogEntry: ...
-   def find_by_id(self, tenant_id: str, entry_id: str) -> LogEntry | None: ...
-   def find_by_date(self, tenant_id: str, log_date: date) -> list[LogEntry]: ...
-   def delete(self, tenant_id: str, entry_id: str) -> bool: ...
-   def update(self, entry: LogEntry) -> LogEntry: ...
-   ```
-3. Update `get_log_repository()` in `api/dependencies.py`
-4. `LogService` requires zero changes
+The abstract interface lives in `repositories/base.py`:
+
+```python
+class AbstractLogRepository(ABC):
+    async def save(self, entry: LogEntry) -> LogEntry: ...
+    async def find_by_id(self, tenant_id: str, entry_id: str) -> LogEntry | None: ...
+    async def find_by_date(self, tenant_id: str, log_date: date) -> list[LogEntry]: ...
+    async def find_by_date_range(
+        self, tenant_id: str, start_date: date, end_date: date
+    ) -> list[LogEntry]: ...
+    async def delete(self, tenant_id: str, entry_id: str) -> bool: ...
+    async def update(self, entry: LogEntry) -> LogEntry: ...
+```
+
+To **switch to Postgres** or another backend:
+
+1. Create `src/app/repositories/postgres_log_repository.py`
+2. Inherit from `AbstractLogRepository` and implement all methods
+3. Change `DATABASE_URL` in your `.env` / Helm secret
+4. Update `get_log_repository()` in `api/dependencies.py`
+5. `LogService` requires zero changes
+
+**Important for tests:** Always use `sqlite+aiosqlite:///:memory:` in test fixtures. Never let tests write to the production `.db` file. The `test_settings` fixture in `conftest.py` already sets `database_url="sqlite+aiosqlite:///:memory:`.
 
 ---
 
@@ -628,8 +697,15 @@ All config lives in `src/app/core/config.py` as a `pydantic-settings` model. Nev
 # Minimum .env for local development
 API_KEYS={"dev-key":"tenant_dev"}
 USDA_API_KEY=DEMO_KEY
+DATABASE_URL=sqlite+aiosqlite:///nutrition_tracker.db
 DEBUG=true
 CORS_ORIGINS=["*"]
+# Optional — webhook notifications
+WEBHOOK_ENABLED=false
+WEBHOOK_URL=
+# Optional — product lookup
+BARCODE_LOOKUP_ORDER=["open_food_facts","usda_fooddata"]
+CACHE_TTL_SECONDS=3600
 ```
 
 To add a new config value:
@@ -701,3 +777,5 @@ git push --tags
 | Use `if value` on `Decimal \| None` fields | `Decimal("0")` is falsy — zero values silently disappear |
 | Commit `*.db` files | Generated runtime files do not belong in version control |
 | Use `if value` truthiness on any nullable numeric field | Zero is a valid value for `int \| None` and `float \| None` too |
+| Use `unittest.mock.patch` to replace a FastAPI `Depends()` function | FastAPI captures function references at import time — use `app.dependency_overrides[fn]` instead (see Section 5.6) |
+| Let integration tests write to the real `.db` file | Always use `sqlite+aiosqlite:///:memory:` in test settings; reset `_deps._repository = None` per test |

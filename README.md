@@ -41,11 +41,22 @@ This API enables users to log consumed food and beverages, automatically fetchin
 | Feature | Detail |
 |---|---|
 | **Multi-Tenancy** | Strict data isolation per user via static API keys |
-| **Adapter Pattern** | Source-agnostic product normalization (OFF + USDA) |
-| **Hydration Tracking** | Separate liquid volume aggregation in ml |
-| **Nutrition Aggregation** | Daily macro/micronutrient totals |
+| **Adapter Pattern** | Source-agnostic product normalization (OFF + USDA + Manual) |
+| **Hydration Tracking** | Separate liquid volume aggregation in ml with range reports |
+| **Nutrition Aggregation** | Daily & range macro/micronutrient totals |
 | **CRUD Logging** | Full create/read/update/delete for daily log entries |
-| **Production-Ready** | Multi-stage Docker, Helm charts, Health-checks, Graceful shutdown |
+| **SQLite Persistence** | Async SQLAlchemy + aiosqlite — survives restarts, zero-ops for homelab |
+| **Product Cache** | In-process TTL cache to reduce external API calls |
+| **Barcode Lookup** | `GET /api/v1/products/barcode/{code}` — auto-detects source, configurable fallback order |
+| **Manual Products** | Create custom products without any external API |
+| **Meal Templates** | Save named groups of entries for one-click re-logging |
+| **Daily Goals** | Set per-tenant macro + hydration targets and track progress |
+| **CSV Export** | Streaming export for any date range |
+| **Prometheus Metrics** | `/metrics` endpoint for Grafana dashboards |
+| **Webhook Notifications** | Push to ntfy.sh or Gotify on goal milestones |
+| **Rate Limiting** | Per-IP via slowapi |
+| **CORS** | Configurable allowed origins |
+| **Production-Ready** | Multi-stage Docker, Helm charts, health-checks, graceful shutdown |
 
 ---
 
@@ -115,33 +126,63 @@ nutrition-tracker/
 │
 ├── src/
 │   └── app/
-│       ├── main.py             # FastAPI app factory, lifespan, middleware registration
+│       ├── main.py             # FastAPI app factory, lifespan, middleware, /metrics
 │       ├── core/
 │       │   ├── config.py       # Pydantic Settings (env-based configuration)
+│       │   ├── metrics.py      # Prometheus counters/histograms (module-level singletons)
 │       │   └── security.py     # API-Key validation dependency → returns tenant_id
 │       ├── domain/
-│       │   ├── models.py       # ALL Pydantic schemas: GeneralizedProduct, LogEntry, Summaries
+│       │   ├── models.py       # ALL Pydantic schemas: GeneralizedProduct, LogEntry, Goals, Templates
 │       │   └── ports.py        # Abstract interfaces + custom domain exceptions
 │       ├── adapters/
+│       │   ├── manual.py           # Manual product adapter (delegates to ManualProductRepository)
 │       │   ├── open_food_facts.py  # OFF API adapter (barcode/search → GeneralizedProduct)
 │       │   └── usda_fooddata.py    # USDA API adapter (fdcId/search → GeneralizedProduct)
 │       ├── services/
-│       │   └── log_service.py  # Business logic: create/read/update/delete + daily aggregations
+│       │   ├── barcode_service.py      # Configurable-order barcode lookup across adapters
+│       │   ├── export_service.py       # Streaming CSV generation
+│       │   ├── goals_service.py        # Daily goals CRUD + progress calculation
+│       │   ├── log_service.py          # Core logging: CRUD + daily aggregations + notifications
+│       │   ├── notification_service.py # Fire-and-forget webhooks (ntfy.sh / Gotify)
+│       │   ├── product_cache.py        # In-process TTL cache for GeneralizedProduct
+│       │   ├── product_service.py      # Manual product creation
+│       │   └── template_service.py     # Meal template CRUD + one-click re-logging
 │       ├── api/
-│       │   ├── dependencies.py # DI factory functions for adapters, service, repository
+│       │   ├── dependencies.py # DI factory functions for all services, repositories, adapters
 │       │   └── v1/
-│       │       ├── router.py   # Mounts all v1 sub-routers under /api/v1
-│       │       └── logs.py     # All /logs endpoints (CRUD + daily/nutrition + daily/hydration)
+│       │       ├── router.py       # Mounts all v1 sub-routers under /api/v1
+│       │       ├── goals.py        # GET/PUT/PATCH /goals + /goals/progress
+│       │       ├── logs.py         # /logs CRUD + daily summaries + range aggregations + export
+│       │       ├── products.py     # /products/search + /products/barcode/{code} + POST /products
+│       │       └── templates.py    # /templates CRUD + /templates/{id}/log
 │       └── repositories/
-│           └── log_repository.py  # In-memory store, keyed by tenant_id → entry_id
+│           ├── base.py                     # AbstractLogRepository (ABC)
+│           ├── goals_repository.py         # In-memory per-tenant goals store
+│           ├── log_repository.py           # In-memory log store (legacy / tests)
+│           ├── manual_product_repository.py # In-memory manual product store
+│           ├── sqlite_log_repository.py    # Async SQLite via SQLAlchemy + aiosqlite
+│           └── template_repository.py      # In-memory per-tenant template store
 │
 ├── tests/
-│   ├── conftest.py             # Shared fixtures: test client, settings override, auth headers
+│   ├── conftest.py             # Shared fixtures: test client, in-memory SQLite settings, auth headers
 │   ├── unit/
-│   │   ├── test_adapters.py    # Adapter normalization logic (mocked HTTP)
-│   │   └── test_log_service.py # Service business logic (tenant isolation, aggregation)
+│   │   ├── test_adapters.py        # Adapter normalization (OFF, USDA, Manual) — mocked HTTP
+│   │   ├── test_barcode_service.py # Fallback order, error propagation
+│   │   ├── test_export_service.py  # CSV header, zero-value handling, scaling
+│   │   ├── test_goals_service.py   # Goals CRUD + progress calculation
+│   │   ├── test_log_service.py     # Service business logic (tenant isolation, aggregation)
+│   │   ├── test_metrics.py         # Prometheus counter increments
+│   │   ├── test_models.py          # Domain model validators, computed properties
+│   │   ├── test_notification_service.py  # ntfy / Gotify payload, disabled webhook
+│   │   ├── test_product_cache.py   # Cache hit/miss/TTL expiry
+│   │   ├── test_sqlite_repository.py     # Async SQLite CRUD + tenant isolation
+│   │   └── test_template_service.py      # Template CRUD + tenant isolation
 │   └── integration/
-│       └── test_api_logs.py    # Full HTTP cycle tests via TestClient
+│       ├── test_api_export.py      # /logs/export streaming CSV
+│       ├── test_api_goals.py       # /goals and /goals/progress endpoints
+│       ├── test_api_logs.py        # Full HTTP cycle: CRUD, nutrition/hydration summaries, ranges
+│       ├── test_api_products.py    # /products/search, /products/barcode, POST /products
+│       └── test_api_templates.py   # /templates CRUD + /log
 │
 ├── deploy/
 │   └── charts/
@@ -242,17 +283,56 @@ HTTP 201 Created
 
 ### Endpoints
 
+#### System
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `GET` | `/healthz` | — | Liveness check |
+| `GET` | `/readyz` | — | Readiness check |
+| `GET` | `/metrics` | — | Prometheus metrics (scrape target for Grafana) |
+
+#### Log Entries
+
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/healthz` | Liveness check |
-| `GET` | `/readyz` | Readiness check |
 | `POST` | `/api/v1/logs/` | Create a new log entry |
-| `GET` | `/api/v1/logs/daily` | Get all entries for a date |
+| `GET` | `/api/v1/logs/daily` | All entries for today (or `?log_date=YYYY-MM-DD`) |
 | `GET` | `/api/v1/logs/daily/nutrition` | Daily macro/micronutrient totals |
 | `GET` | `/api/v1/logs/daily/hydration` | Daily fluid intake in ml |
+| `GET` | `/api/v1/logs/range/nutrition` | Nutrition totals for a date range (`?from=&to=`) |
+| `GET` | `/api/v1/logs/range/hydration` | Hydration totals for a date range (`?from=&to=`) |
+| `GET` | `/api/v1/logs/export` | Streaming CSV export for a date range (`?from=&to=`) |
 | `GET` | `/api/v1/logs/{entry_id}` | Get a single log entry |
 | `PATCH` | `/api/v1/logs/{entry_id}` | Update quantity or note |
 | `DELETE` | `/api/v1/logs/{entry_id}` | Delete a log entry |
+
+#### Products
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/v1/products/search` | Search products (`?q=&source=&limit=`) |
+| `GET` | `/api/v1/products/barcode/{code}` | Lookup by barcode — auto-detects source |
+| `POST` | `/api/v1/products` | Create a manual product (HTTP 201) |
+
+#### Goals
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/v1/goals` | Get current daily goals |
+| `PUT` | `/api/v1/goals` | Replace daily goals |
+| `PATCH` | `/api/v1/goals` | Partially update daily goals |
+| `GET` | `/api/v1/goals/progress` | Today's actual vs. target (`?date=YYYY-MM-DD`) |
+
+#### Meal Templates
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/v1/templates` | List all meal templates |
+| `POST` | `/api/v1/templates` | Create a new template (HTTP 201) |
+| `DELETE` | `/api/v1/templates/{template_id}` | Delete a template (HTTP 204) |
+| `POST` | `/api/v1/templates/{template_id}/log` | Log all entries from a template (`?date=YYYY-MM-DD`) |
+
+> All `/api/v1/` endpoints require `X-API-Key` header authentication.
 
 ### Example Requests
 
@@ -335,6 +415,7 @@ pre-commit install
 cat > .env << 'EOF'
 API_KEYS={"dev-key-alice": "tenant_alice", "dev-key-bob": "tenant_bob"}
 USDA_API_KEY=DEMO_KEY
+DATABASE_URL=sqlite+aiosqlite:///nutrition_tracker.db
 DEBUG=true
 CORS_ORIGINS=["*"]
 EOF
@@ -356,10 +437,15 @@ All configuration via environment variables or `.env`. Managed by `pydantic-sett
 |---|---|---|---|
 | `API_KEYS` | JSON dict | `{}` | Maps API keys to tenant IDs: `{"key": "tenant_id"}` |
 | `USDA_API_KEY` | string | `DEMO_KEY` | USDA FoodData Central API key ([signup](https://fdc.nal.usda.gov/api-key-signup.html)) |
+| `DATABASE_URL` | string | `sqlite+aiosqlite:///nutrition_tracker.db` | SQLAlchemy async connection URL |
 | `DEBUG` | bool | `false` | Enables debug logging |
 | `CORS_ORIGINS` | JSON list | `["*"]` | Allowed CORS origins |
 | `RATE_LIMIT_REQUESTS` | int | `100` | Max requests per window |
 | `RATE_LIMIT_WINDOW_SECONDS` | int | `60` | Rate limit window in seconds |
+| `CACHE_TTL_SECONDS` | int | `3600` | Product cache TTL (1 hour default) |
+| `BARCODE_LOOKUP_ORDER` | JSON list | `["open_food_facts","usda_fooddata"]` | Adapter fallback order for barcode lookups |
+| `WEBHOOK_ENABLED` | bool | `false` | Enable webhook notifications |
+| `WEBHOOK_URL` | string | `null` | Target URL for ntfy.sh or Gotify |
 
 > ⚠️ Never commit `.env`. In Kubernetes, inject secrets via Helm `--set secrets.*` or External Secrets Operator.
 
@@ -620,9 +706,36 @@ pytest tests/integration/ -v
 pytest --cov=app --cov-report=term-missing
 ```
 
+The test suite contains **118 tests** across 16 files (11 unit, 5 integration).
+
+### Test Isolation — In-Memory SQLite
+
+Every integration test uses an isolated in-memory SQLite database (`sqlite+aiosqlite:///:memory:`) via the `test_settings` fixture in `conftest.py`. The `client` fixture:
+
+1. Resets the `_repository` singleton before and after each test
+2. Uses `app.dependency_overrides[get_settings]` — **not** `unittest.mock.patch` — to inject test settings into FastAPI's DI system
+3. Yields a `TestClient` that connects to the in-memory DB
+
+> **Why `app.dependency_overrides` instead of `patch`?** FastAPI captures `Depends()` function object references at import time. `unittest.mock.patch` replaces the name in the module namespace, but FastAPI's DI still calls the original function. `app.dependency_overrides` is the correct mechanism to replace a FastAPI dependency in tests.
+
+For integration tests that need to control service behaviour, use `patch` on the *service method* (not on `get_settings`) and override `get_tenant_id` via `dependency_overrides`:
+
+```python
+from app.core.security import get_tenant_id
+
+app.dependency_overrides[get_tenant_id] = lambda: "tenant_alice"
+try:
+    with patch("app.services.log_service.LogService.get_entry", new_callable=AsyncMock) as m:
+        m.return_value = None
+        response = client.get("/api/v1/logs/some-id", headers={"X-API-Key": "any"})
+        assert response.status_code == 404
+finally:
+    app.dependency_overrides.clear()
+```
+
 ### Known CI Failure: pytest Exit Code 5
 
-**Exit code 5 = no tests collected.** This happens when a test file exists but contains no `test_` functions — typically when placeholder files are left empty. Every `.py` file under `tests/` (except `conftest.py` and `__init__.py`) must contain at least one test function. The baseline integration tests covering health checks and 401/404 responses are the minimum acceptable content for `tests/integration/test_api_logs.py`.
+**Exit code 5 = no tests collected.** This happens when a test file exists but contains no `test_` functions — typically when placeholder files are left empty. Every `.py` file under `tests/` (except `conftest.py` and `__init__.py`) must contain at least one test function.
 
 ### Known CI Failure: mypy --strict
 
@@ -655,6 +768,7 @@ This project enforces `mypy src/app --strict`. Common patterns that break it are
 | Replacing the repository | `AGENTS.md` Section 8 |
 | Unit conversion table | `AGENTS.md` Section 10 |
 | **pytest exit code 5 fix + integration test baseline** | **`AGENTS.md` Section 5.4** |
+| **FastAPI test isolation (dependency_overrides vs patch)** | **`AGENTS.md` Section 5.6** |
 | What NOT to do | `AGENTS.md` Section 12 |
 
 ### Critical Files (read in this order)
@@ -680,10 +794,10 @@ This project enforces `mypy src/app --strict`. Common patterns that break it are
 **Decision:** All nutritional values use `decimal.Decimal`.
 **Rationale:** Float arithmetic accumulates errors. `Decimal("0.1") + Decimal("0.2") == Decimal("0.3")` is true; the float equivalent is false.
 
-### ADR-003: In-Memory Repository as default
+### ADR-003: SQLite as default persistence
 
-**Decision:** Ship with `InMemoryLogRepository`, designed for easy replacement.
-**Rationale:** Zero external dependencies for homelab. Interface is stable — swap to SQLite/Postgres in one file.
+**Decision:** Default to `SQLiteLogRepository` backed by async SQLAlchemy + aiosqlite. `InMemoryLogRepository` is retained for tests only.
+**Rationale:** Zero external dependencies for homelab, survives pod restarts, single `.db` file easy to back up. Interface (defined in `AbstractLogRepository`) is stable — swap to Postgres in one file by changing `DATABASE_URL`.
 
 ### ADR-004: Embedded product snapshot in LogEntry
 
@@ -705,37 +819,37 @@ This project enforces `mypy src/app --strict`. Common patterns that break it are
 ## 🗺 Roadmap
 
 ### 🏗 Infrastructure & Persistence
-- [ ] **Persistent storage:** SQLite via SQLAlchemy async + aiosqlite (single-file, zero-ops for homelab)
-- [ ] **Formal Repository ABC:** Introduce `AbstractLogRepository` to make the interface contract explicit
+- [x] **Persistent storage:** SQLite via SQLAlchemy async + aiosqlite (single-file, zero-ops for homelab)
+- [x] **Formal Repository ABC:** `AbstractLogRepository` in `repositories/base.py`
 - [ ] **Redis cache:** Replace in-memory TTL cache with Redis for persistence across restarts
-- [ ] **Prometheus metrics:** `GET /metrics` endpoint for Grafana dashboards (request count, external API latency, cache hit rate)
+- [x] **Prometheus metrics:** `GET /metrics` endpoint for Grafana dashboards (request count, external API latency, cache hit rate)
 - [ ] **OpenAPI client generation:** Auto-generate typed Python/TypeScript client as part of CI pipeline
 - [ ] **Pre-commit config:** Add `mypy` to pre-commit hooks
 
 ### 🔍 Product & Data
-- [ ] **Product search endpoint:** `GET /api/v1/products/search?q=banana&source=open_food_facts`
-- [ ] **Product caching:** TTL-based cache to avoid redundant external API calls
-- [ ] **Manual product entry:** `POST /api/v1/products` with `source: manual`
-- [ ] **Barcode shortcut:** `GET /api/v1/products/barcode/{code}` — auto-detects source, no need to specify
+- [x] **Product search endpoint:** `GET /api/v1/products/search?q=banana&source=open_food_facts`
+- [x] **Product caching:** TTL-based in-process cache to avoid redundant external API calls
+- [x] **Manual product entry:** `POST /api/v1/products` with `source: manual`
+- [x] **Barcode shortcut:** `GET /api/v1/products/barcode/{code}` — auto-detects source, configurable fallback order
 - [ ] **Allergen tracking:** Add allergen flags to `GeneralizedProduct` (gluten, lactose, nuts, etc.)
 - [ ] **Recipes:** Combine multiple ingredients into a single product with auto-calculated nutrients
 
 ### 📊 Logging & Analysis
-- [ ] **Meal templates:** Save named groups of log entries (e.g. "My usual breakfast") for one-click re-logging
-- [ ] **Weekly/monthly aggregation:** `GET /api/v1/logs/range/nutrition?from=...&to=...`
-- [ ] **CSV export:** `GET /api/v1/logs/export?format=csv&from=...&to=...`
+- [x] **Meal templates:** Save named groups of log entries (e.g. "My usual breakfast") for one-click re-logging
+- [x] **Weekly/monthly aggregation:** `GET /api/v1/logs/range/nutrition?from=...&to=...`
+- [x] **CSV export:** `GET /api/v1/logs/export?from=...&to=...` (streaming, zero memory overhead)
 - [ ] **Weekly PDF report:** Summarized nutrition and hydration report as downloadable PDF
 - [ ] **Streak tracking:** How many consecutive days have been logged
 - [ ] **Nutrient deficiency warnings:** Alert when a micronutrient stays below threshold for N days
 
 ### 🎯 Goals & Progress
-- [ ] **Daily goals:** `PUT /api/v1/goals` — set targets for calories, macros, water intake
-- [ ] **Goals progress:** `GET /api/v1/goals/progress?date=...` — actual vs. target with percentage
+- [x] **Daily goals:** `PUT /api/v1/goals` — set targets for calories, macros, water intake
+- [x] **Goals progress:** `GET /api/v1/goals/progress?date=...` — actual vs. target with percentage
 - [ ] **Body weight logging:** Track weight over time for TDEE-based calorie need calculation
 - [ ] **Calorie balance:** Intake vs. expenditure when activity data is available
 
 ### 🔔 Notifications & Integrations
-- [ ] **Webhook notifications:** Push to ntfy.sh or Gotify (homelab-friendly) when daily goal is reached
+- [x] **Webhook notifications:** Push to ntfy.sh or Gotify (homelab-friendly) when daily goal is reached
 - [ ] **Rate limiting per tenant:** Replace IP-based rate limiting with per-API-key limits
 
 ---
