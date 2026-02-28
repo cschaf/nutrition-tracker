@@ -2,12 +2,12 @@
 from __future__ import annotations
 
 import uuid
-from typing import Self
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from enum import StrEnum
+from typing import Self
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 # ---------------------------------------------------------------------------
 # Value Objects
