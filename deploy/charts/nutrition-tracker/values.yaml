@@ -1,6 +1,11 @@
 # deploy/charts/nutrition-tracker/values.yaml
 replicaCount: 2
 
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8000"
+  prometheus.io/path: "/metrics"
+
 image:
   repository: ghcr.io/your-org/nutrition-tracker
   pullPolicy: IfNotPresent
