@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import time
 
+from app.core.metrics import CACHE_HITS, CACHE_MISSES
 from app.domain.models import DataSource, GeneralizedProduct
 
 
@@ -20,13 +21,16 @@ class ProductCache:
         """Holt ein Produkt aus dem Cache, sofern vorhanden und nicht abgelaufen."""
         key = (source, product_id)
         if key not in self._storage:
+            CACHE_MISSES.inc()
             return None
 
         product, timestamp = self._storage[key]
         if (time.time() - timestamp) > self._ttl:
             del self._storage[key]
+            CACHE_MISSES.inc()
             return None
 
+        CACHE_HITS.inc()
         return product
 
     def set(self, source: DataSource, product_id: str, product: GeneralizedProduct) -> None:

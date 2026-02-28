@@ -7,6 +7,7 @@ from decimal import Decimal, InvalidOperation
 import httpx
 from pydantic import BaseModel, Field
 
+from app.core.metrics import EXTERNAL_API_COUNT, EXTERNAL_API_DURATION
 from app.domain.models import (
     DataSource,
     GeneralizedProduct,
@@ -86,11 +87,15 @@ class OpenFoodFactsAdapter(ProductSourcePort):
         """product_id entspricht dem EAN/UPC Barcode."""
         url = f"{_BASE_URL}/api/v0/product/{product_id}.json"
         try:
-            response = await self._client.get(url, timeout=10.0)
-            response.raise_for_status()
+            with EXTERNAL_API_DURATION.labels(source="open_food_facts").time():
+                response = await self._client.get(url, timeout=10.0)
+                response.raise_for_status()
+            EXTERNAL_API_COUNT.labels(source="open_food_facts", status="success").inc()
         except httpx.HTTPStatusError as e:
+            EXTERNAL_API_COUNT.labels(source="open_food_facts", status="error").inc()
             raise ExternalApiError("open_food_facts", str(e)) from e
         except httpx.RequestError as e:
+            EXTERNAL_API_COUNT.labels(source="open_food_facts", status="error").inc()
             raise ExternalApiError("open_food_facts", f"Connection error: {e}") from e
 
         raw = _OffResponse.model_validate(response.json())
@@ -111,9 +116,12 @@ class OpenFoodFactsAdapter(ProductSourcePort):
             "fields": "code,product_name,brands,nutriments,pnns_groups_1,product_type",
         }
         try:
-            response = await self._client.get(url, params=params, timeout=15.0)
-            response.raise_for_status()
+            with EXTERNAL_API_DURATION.labels(source="open_food_facts").time():
+                response = await self._client.get(url, params=params, timeout=15.0)
+                response.raise_for_status()
+            EXTERNAL_API_COUNT.labels(source="open_food_facts", status="success").inc()
         except (httpx.HTTPStatusError, httpx.RequestError) as e:
+            EXTERNAL_API_COUNT.labels(source="open_food_facts", status="error").inc()
             raise ExternalApiError("open_food_facts", str(e)) from e
 
         data = response.json()

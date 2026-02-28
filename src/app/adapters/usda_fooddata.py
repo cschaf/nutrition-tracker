@@ -7,6 +7,7 @@ from decimal import Decimal
 import httpx
 from pydantic import BaseModel, Field
 
+from app.core.metrics import EXTERNAL_API_COUNT, EXTERNAL_API_DURATION
 from app.domain.models import DataSource, GeneralizedProduct, Macronutrients, Micronutrients
 from app.domain.ports import ExternalApiError, ProductNotFoundError, ProductSourcePort
 
@@ -67,13 +68,20 @@ class UsdaFoodDataAdapter(ProductSourcePort):
         url = f"{_BASE_URL}/food/{product_id}"
         params: dict[str, str | int] = {"api_key": self._api_key}
         try:
-            response = await self._client.get(url, params=params, timeout=10.0)
-            if response.status_code == 404:
-                raise ProductNotFoundError(product_id, "usda_fooddata")
-            response.raise_for_status()
+            with EXTERNAL_API_DURATION.labels(source="usda_fooddata").time():
+                response = await self._client.get(url, params=params, timeout=10.0)
+                if response.status_code == 404:
+                    raise ProductNotFoundError(product_id, "usda_fooddata")
+                response.raise_for_status()
+            EXTERNAL_API_COUNT.labels(source="usda_fooddata", status="success").inc()
+        except ProductNotFoundError:
+            EXTERNAL_API_COUNT.labels(source="usda_fooddata", status="success").inc()
+            raise
         except httpx.HTTPStatusError as e:
+            EXTERNAL_API_COUNT.labels(source="usda_fooddata", status="error").inc()
             raise ExternalApiError("usda_fooddata", str(e)) from e
         except httpx.RequestError as e:
+            EXTERNAL_API_COUNT.labels(source="usda_fooddata", status="error").inc()
             raise ExternalApiError("usda_fooddata", f"Connection error: {e}") from e
 
         raw = _UsdaFoodItem.model_validate(response.json())
@@ -83,9 +91,12 @@ class UsdaFoodDataAdapter(ProductSourcePort):
         url = f"{_BASE_URL}/foods/search"
         params: dict[str, str | int] = {"api_key": self._api_key, "query": query, "pageSize": limit}
         try:
-            response = await self._client.get(url, params=params, timeout=15.0)
-            response.raise_for_status()
+            with EXTERNAL_API_DURATION.labels(source="usda_fooddata").time():
+                response = await self._client.get(url, params=params, timeout=15.0)
+                response.raise_for_status()
+            EXTERNAL_API_COUNT.labels(source="usda_fooddata", status="success").inc()
         except (httpx.HTTPStatusError, httpx.RequestError) as e:
+            EXTERNAL_API_COUNT.labels(source="usda_fooddata", status="error").inc()
             raise ExternalApiError("usda_fooddata", str(e)) from e
 
         data = response.json()
