@@ -28,6 +28,7 @@
 - [AI Agent Guide](#-ai-agent-guide)
 - [Design Decisions & ADRs](#-design-decisions--adrs)
 - [Roadmap](#-roadmap)
+- [Feature Implementation Prompts](#-feature-implementation-prompts)
 
 ---
 
@@ -703,15 +704,584 @@ This project enforces `mypy src/app --strict`. Common patterns that break it are
 
 ## 🗺 Roadmap
 
-- [ ] **Persistent storage:** SQLite via SQLAlchemy (single-file, zero-ops for homelab)
-- [ ] **Product caching:** In-memory TTL cache to avoid redundant external API calls
-- [ ] **Search endpoint:** `GET /api/v1/products/search?q=banana&source=open_food_facts`
-- [ ] **Weekly/monthly aggregation:** Trend endpoints for nutrition over time
-- [ ] **Manual product entry:** `POST /api/v1/products` with `source: manual`
-- [ ] **Export:** `GET /api/v1/logs/export?format=csv&from=...&to=...`
-- [ ] **Goals tracking:** Daily targets for calories, protein, water intake
-- [ ] **Formal Repository ABC:** Introduce `AbstractLogRepository` for explicit interface contract
+### 🏗 Infrastructure & Persistence
+- [ ] **Persistent storage:** SQLite via SQLAlchemy async + aiosqlite (single-file, zero-ops for homelab)
+- [ ] **Formal Repository ABC:** Introduce `AbstractLogRepository` to make the interface contract explicit
+- [ ] **Redis cache:** Replace in-memory TTL cache with Redis for persistence across restarts
+- [ ] **Prometheus metrics:** `GET /metrics` endpoint for Grafana dashboards (request count, external API latency, cache hit rate)
+- [ ] **OpenAPI client generation:** Auto-generate typed Python/TypeScript client as part of CI pipeline
 - [ ] **Pre-commit config:** Add `mypy` to pre-commit hooks
+
+### 🔍 Product & Data
+- [ ] **Product search endpoint:** `GET /api/v1/products/search?q=banana&source=open_food_facts`
+- [ ] **Product caching:** TTL-based cache to avoid redundant external API calls
+- [ ] **Manual product entry:** `POST /api/v1/products` with `source: manual`
+- [ ] **Barcode shortcut:** `GET /api/v1/products/barcode/{code}` — auto-detects source, no need to specify
+- [ ] **Allergen tracking:** Add allergen flags to `GeneralizedProduct` (gluten, lactose, nuts, etc.)
+- [ ] **Recipes:** Combine multiple ingredients into a single product with auto-calculated nutrients
+
+### 📊 Logging & Analysis
+- [ ] **Meal templates:** Save named groups of log entries (e.g. "My usual breakfast") for one-click re-logging
+- [ ] **Weekly/monthly aggregation:** `GET /api/v1/logs/range/nutrition?from=...&to=...`
+- [ ] **CSV export:** `GET /api/v1/logs/export?format=csv&from=...&to=...`
+- [ ] **Weekly PDF report:** Summarized nutrition and hydration report as downloadable PDF
+- [ ] **Streak tracking:** How many consecutive days have been logged
+- [ ] **Nutrient deficiency warnings:** Alert when a micronutrient stays below threshold for N days
+
+### 🎯 Goals & Progress
+- [ ] **Daily goals:** `PUT /api/v1/goals` — set targets for calories, macros, water intake
+- [ ] **Goals progress:** `GET /api/v1/goals/progress?date=...` — actual vs. target with percentage
+- [ ] **Body weight logging:** Track weight over time for TDEE-based calorie need calculation
+- [ ] **Calorie balance:** Intake vs. expenditure when activity data is available
+
+### 🔔 Notifications & Integrations
+- [ ] **Webhook notifications:** Push to ntfy.sh or Gotify (homelab-friendly) when daily goal is reached
+- [ ] **Rate limiting per tenant:** Replace IP-based rate limiting with per-API-key limits
+
+---
+
+---
+
+## 🛠 Feature Implementation Prompts
+
+> Use these prompts verbatim in a new chat session to implement each roadmap feature.
+> Every prompt instructs the agent to read `AGENTS.md` first and enforces ruff + mypy as hard acceptance criteria.
+>
+> **Known pitfalls pre-documented in every prompt:**
+> - `Query(alias=...)` directly on endpoint parameters — never via `Depends()` with a Pydantic model
+> - `StrEnum` instead of `str, Enum`
+> - `dict[str, str]` for httpx params
+> - `Annotated` deps without `= None` defaults
+> - Test files must contain at least one `test_` function (pytest exit code 5)
+
+Use these prompts verbatim in a new chat session to implement each roadmap feature.
+Every prompt instructs the agent to read `AGENTS.md` first and enforces ruff + mypy as hard acceptance criteria.
+
+**Known pitfalls pre-documented in every prompt:**
+- `Query(alias=...)` directly on endpoint parameters — never via `Depends()` with a Pydantic model
+- `StrEnum` instead of `str, Enum`
+- `dict[str, str]` for httpx params
+- `Annotated` deps without `= None` defaults
+- Test files must contain at least one `test_` function (pytest exit code 5)
+
+---
+
+### Prompt 1 — Persistent Storage (SQLite)
+
+```
+Du arbeitest am Projekt "Nutrition & Hydration Tracking API".
+Lies zuerst AGENTS.md vollständig (insbesondere Abschnitt 4a und 5.4),
+dann src/app/repositories/log_repository.py und src/app/api/dependencies.py.
+
+Implementiere eine SQLite-Persistenzschicht als Ersatz für das InMemoryLogRepository.
+
+Technische Vorgaben:
+- Verwende SQLAlchemy async + aiosqlite
+- Alle Enum-Felder: StrEnum statt str, Enum (siehe AGENTS.md 4a.1)
+- Alle dict-Typannotierungen vollständig: dict[str, str] nie dict allein
+- Keine = None Defaults bei Annotated FastAPI-Dependencies
+
+Schritte:
+1. Erstelle src/app/repositories/base.py mit AbstractLogRepository (ABC).
+   Methoden: save(), find_by_id(), find_by_date(), find_by_date_range(), delete(), update()
+   Alle mit vollständigen Typannotierungen die mypy --strict bestehen.
+2. Aktualisiere src/app/repositories/log_repository.py:
+   InMemoryLogRepository erbt von AbstractLogRepository.
+3. Erstelle src/app/repositories/sqlite_log_repository.py:
+   SQLiteLogRepository erbt von AbstractLogRepository.
+   Nutze async Session, mapped_column(), DeclarativeBase.
+   Speichere GeneralizedProduct als JSON-Blob (product_json: str).
+   Deserialisiere mit GeneralizedProduct.model_validate_json() beim Lesen.
+4. Aktualisiere get_log_repository() in src/app/api/dependencies.py
+   auf SQLiteLogRepository. Datenbankpfad via Settings: DB_PATH: str = "nutrition.db"
+5. Ergänze in pyproject.toml: sqlalchemy[asyncio]>=2.0 und aiosqlite>=0.19
+6. Schreibe tests/unit/test_sqlite_repository.py mit pytest-asyncio.
+   Nutze eine In-Memory SQLite DB (:memory:) für Tests — nie die produktive DB.
+7. Stelle sicher:
+   - ruff check src/ tests/ gibt 0 Fehler
+   - mypy src/app --strict gibt 0 Fehler
+   - pytest tests/unit/test_sqlite_repository.py läuft durch
+```
+
+---
+
+### Prompt 2 — Product Cache (TTL)
+
+```
+Du arbeitest am Projekt "Nutrition & Hydration Tracking API".
+Lies zuerst AGENTS.md vollständig (insbesondere Abschnitt 4a und 5.4),
+dann src/app/adapters/open_food_facts.py, src/app/adapters/usda_fooddata.py
+und src/app/services/log_service.py.
+
+Implementiere einen TTL-basierten Produkt-Cache.
+
+Technische Vorgaben:
+- Kein externes Package (kein Redis, kein cachetools) — reines Python dict mit timestamp
+- Cache-Key: f"{source}:{product_id}" als str
+- Alle Typannotierungen vollständig für mypy --strict
+- Der Cache ist ein Singleton der via DI injiziert wird — nicht als globale Variable
+
+Schritte:
+1. Erstelle src/app/services/product_cache.py:
+   class ProductCache mit get(key) -> GeneralizedProduct | None und set(key, product).
+   TTL-Prüfung beim get(): wenn Eintrag älter als ttl_seconds → None zurückgeben und löschen.
+   Interner Store: dict[str, tuple[GeneralizedProduct, float]] (product, timestamp).
+2. Ergänze in src/app/core/config.py: CACHE_TTL_SECONDS: int = 3600
+3. Ergänze get_product_cache() Factory in src/app/api/dependencies.py.
+   ProductCache als Singleton via @lru_cache auf der Factory-Funktion.
+4. Injiziere ProductCache in LogService.__init__() als optionalen Parameter:
+   cache: ProductCache | None = None
+   In create_entry(): vor adapter.fetch_by_id() Cache prüfen, nach Fetch in Cache schreiben.
+5. Schreibe tests/unit/test_product_cache.py:
+   - test_cache_hit: Produkt liegt im Cache → Adapter wird nicht aufgerufen
+   - test_cache_miss: Produkt nicht im Cache → Adapter wird aufgerufen, Ergebnis gecacht
+   - test_cache_ttl_expiry: Eintrag nach TTL abgelaufen → Cache-Miss
+6. Stelle sicher:
+   - ruff check src/ tests/ gibt 0 Fehler
+   - mypy src/app --strict gibt 0 Fehler
+   - pytest tests/unit/test_product_cache.py läuft durch
+```
+
+---
+
+### Prompt 3 — Product Search Endpoint
+
+```
+Du arbeitest am Projekt "Nutrition & Hydration Tracking API".
+Lies zuerst AGENTS.md vollständig (insbesondere Abschnitt 4a und 5.4),
+dann src/app/domain/ports.py, src/app/api/v1/router.py,
+src/app/api/v1/logs.py (als Muster für Endpoint-Struktur) und src/app/api/dependencies.py.
+
+Implementiere einen Produkt-Suche Endpoint.
+
+Technische Vorgaben:
+- Query-Parameter direkt am Endpoint mit Query(...) — NICHT via Depends(PydanticModel)
+  (Depends mit Pydantic Query-Modellen führt zu 422-Fehlern bei Alias-Parametern)
+- TenantDep = Annotated[str, Security(get_tenant_id)] — kein = None Default
+- Alle dict-Typannotierungen vollständig
+
+Schritte:
+1. Erstelle src/app/api/v1/products.py:
+   GET /api/v1/products/search
+   Query-Parameter direkt:
+     q: str = Query(..., min_length=1, max_length=200)
+     source: DataSource = Query(...)
+     limit: int = Query(default=10, ge=1, le=20)
+   Ruft adapter.search(query=q, limit=limit) aus der AdapterRegistry auf.
+   Gibt list[GeneralizedProduct] zurück.
+   Fehlerbehandlung:
+     - KeyError bei unbekannter Source → HTTP 400
+     - ExternalApiError → HTTP 502 mit detail
+2. Registriere in src/app/api/v1/router.py:
+   from app.api.v1 import products
+   api_router.include_router(products.router, prefix="/products", tags=["Products"])
+3. Schreibe tests/integration/test_api_products.py mit mindestens:
+   - test_search_requires_auth → 403
+   - test_search_invalid_source → 400
+   - test_search_success (Mock den Adapter via dependency_overrides)
+4. Stelle sicher:
+   - ruff check src/ tests/ gibt 0 Fehler
+   - mypy src/app --strict gibt 0 Fehler
+   - pytest tests/integration/test_api_products.py läuft durch
+```
+
+---
+
+### Prompt 4 — Weekly/Monthly Aggregation
+
+```
+Du arbeitest am Projekt "Nutrition & Hydration Tracking API".
+Lies zuerst AGENTS.md vollständig (insbesondere Abschnitt 4a und 5.4),
+dann src/app/services/log_service.py, src/app/repositories/base.py
+(oder log_repository.py falls base.py noch nicht existiert) und src/app/api/v1/logs.py.
+
+Implementiere Trend-Endpunkte für Zeitraum-Aggregationen.
+
+KRITISCH — Query-Parameter Alias-Problem:
+FastAPI Query-Parameter mit alias="from" müssen DIREKT am Endpoint-Parameter
+definiert werden, NICHT in einem Pydantic-Modell via Depends().
+"from" ist ein Python-Keyword — intern als from_date benennen, alias="from" setzen.
+Falsche Variante (führt zu 422):
+  class DateRangeParams(BaseModel):
+      from_date: date = Field(alias="from")  # FUNKTIONIERT NICHT mit Depends()
+Korrekte Variante:
+  from_date: date = Query(..., alias="from")  # direkt am Endpoint-Parameter
+
+Technische Vorgaben:
+- Alle Typannotierungen vollständig für mypy --strict
+- StrEnum statt str, Enum
+- TenantDep ohne = None Default
+
+Schritte:
+1. Ergänze find_by_date_range(tenant_id: str, start_date: date, end_date: date)
+   in AbstractLogRepository (base.py) und beiden Implementierungen.
+2. Ergänze in LogService:
+   get_nutrition_range(tenant_id, start_date, end_date) -> list[DailyNutritionSummary]
+   get_hydration_range(tenant_id, start_date, end_date) -> list[DailyHydrationSummary]
+   Refaktoriere gemeinsame Logik in private Hilfsmethoden.
+3. Neue Endpunkte in src/app/api/v1/logs.py:
+   GET /api/v1/logs/range/nutrition?from=2025-01-01&to=2025-01-31
+   GET /api/v1/logs/range/hydration?from=2025-01-01&to=2025-01-31
+   Parameter DIREKT am Endpoint:
+     from_date: date = Query(..., alias="from")
+     to_date: date = Query(..., alias="to")
+   Validierung im Endpoint-Body (nicht im Schema):
+     if from_date > to_date → HTTP 400
+     if (to_date - from_date).days > 366 → HTTP 400
+4. DateRangeParams Schema in domain/models.py darf als Dokumentationsschema
+   existieren, aber NICHT als Depends()-Modell im Endpoint verwendet werden.
+5. Schreibe tests/unit/test_log_service.py (range-Methoden) und
+   tests/integration/test_api_logs.py:
+   Integrationstest-URLs mit params={"from": "...", "to": "..."}
+   — NICHT als Query-String in der URL hartcodieren.
+6. Stelle sicher:
+   - ruff check src/ tests/ gibt 0 Fehler
+   - mypy src/app --strict gibt 0 Fehler
+   - pytest läuft durch ohne 422-Fehler
+```
+
+---
+
+### Prompt 5 — Manual Product Entry
+
+```
+Du arbeitest am Projekt "Nutrition & Hydration Tracking API".
+Lies zuerst AGENTS.md vollständig (insbesondere Abschnitt 4a und 5.4),
+dann src/app/domain/models.py und src/app/api/v1/products.py
+(anlegen falls nicht vorhanden — siehe Prompt 3 als Muster).
+
+Implementiere manuellen Produkteintrag ohne externe API.
+
+Technische Vorgaben:
+- DataSource.MANUAL muss in der StrEnum vorhanden sein
+- id wird als str(uuid.uuid4()) generiert — nicht als UUID-Typ (mypy-Kompatibilität)
+- Alle Typannotierungen vollständig für mypy --strict
+
+Schritte:
+1. Stelle sicher dass DataSource(StrEnum) den Wert MANUAL = "manual" enthält.
+2. Neues Schema ManualProductCreate in src/app/domain/models.py:
+   Felder: name, brand, macronutrients, micronutrients, is_liquid, volume_ml_per_100g
+   (identisch zu GeneralizedProduct ohne id, source, barcode).
+3. Neue Methode in einem ManualProductService oder direkt als Funktion:
+   def create_manual_product(payload: ManualProductCreate) -> GeneralizedProduct
+   Setzt source=DataSource.MANUAL, generiert id=str(uuid.uuid4()).
+4. POST /api/v1/products in src/app/api/v1/products.py:
+   Body: ManualProductCreate, Response: GeneralizedProduct (HTTP 201)
+   Das zurückgegebene Produkt kann direkt in POST /api/v1/logs/ genutzt werden:
+   {"product_id": "<uuid>", "source": "manual", "quantity_g": 150}
+5. Entscheide ob manuelle Produkte persistent gespeichert werden:
+   Option A (empfohlen für Homelab): In-Memory ManualProductRepository (dict[str, GeneralizedProduct])
+   Option B: Nur als Response zurückgeben, keine Persistenz
+   Dokumentiere die Entscheidung als Kommentar-ADR in der Datei.
+6. Schreibe Integrationstests in tests/integration/test_api_products.py.
+7. Stelle sicher:
+   - ruff check src/ tests/ gibt 0 Fehler
+   - mypy src/app --strict gibt 0 Fehler
+   - pytest läuft durch
+```
+
+---
+
+### Prompt 6 — CSV Export
+
+```
+Du arbeitest am Projekt "Nutrition & Hydration Tracking API".
+Lies zuerst AGENTS.md vollständig (insbesondere Abschnitt 4a und 5.4),
+dann src/app/services/log_service.py und src/app/api/v1/logs.py.
+
+Implementiere einen CSV-Export-Endpoint.
+
+KRITISCH — Query-Parameter Alias-Problem (identisch zu Prompt 4):
+from_date: date = Query(..., alias="from") direkt am Endpoint — nie via Depends(Model).
+
+Technische Vorgaben:
+- StreamingResponse mit io.StringIO als Generator
+- csv-Modul aus stdlib — keine externe Dependency
+- Alle Typannotierungen vollständig für mypy --strict
+
+Schritte:
+1. Erstelle src/app/services/export_service.py:
+   class ExportService mit generate_csv(entries: list[LogEntry]) -> Iterator[str]
+   Nutzt csv.writer mit io.StringIO.
+   CSV-Spalten: date, time, product_name, brand, source, quantity_g,
+   calories_kcal, protein_g, carbohydrates_g, fat_g, fiber_g, sugar_g,
+   is_liquid, volume_ml, note
+   Erste Zeile: Header. Werte aus entry.scaled_macros und entry.consumed_volume_ml.
+2. Ergänze get_export_service() in src/app/api/dependencies.py.
+3. GET /api/v1/logs/export in src/app/api/v1/logs.py:
+   Parameter direkt am Endpoint:
+     from_date: date = Query(..., alias="from")
+     to_date: date = Query(..., alias="to")
+   Validierung: from_date <= to_date, max. 366 Tage.
+   Response: StreamingResponse(content=..., media_type="text/csv")
+   Header: Content-Disposition: attachment; filename="nutrition_<from>_<to>.csv"
+4. Schreibe tests/unit/test_export_service.py:
+   - Prüfe Header-Zeile
+   - Prüfe korrekte Berechnung von scaled_macros in der CSV-Ausgabe
+5. Schreibe Integrationstest: Response-Status 200, Content-Type text/csv,
+   Content-Disposition Header vorhanden.
+6. Stelle sicher:
+   - ruff check src/ tests/ gibt 0 Fehler
+   - mypy src/app --strict gibt 0 Fehler
+   - pytest läuft durch
+```
+
+---
+
+### Prompt 7 — Daily Goals & Progress Tracking
+
+```
+Du arbeitest am Projekt "Nutrition & Hydration Tracking API".
+Lies zuerst AGENTS.md vollständig (insbesondere Abschnitt 4a und 5.4),
+dann src/app/domain/models.py, src/app/services/log_service.py
+und src/app/api/v1/logs.py (als Muster für Endpoint-Struktur).
+
+Implementiere tägliche Zielwerte mit Fortschrittsanzeige.
+
+Technische Vorgaben:
+- Alle Decimal-Felder als Decimal, nie float
+- TenantDep ohne = None Default
+- GoalsRepository als Singleton via @lru_cache in dependencies.py
+
+Schritte:
+1. Neue Domain-Modelle in src/app/domain/models.py:
+   class DailyGoals(BaseModel):
+     calories_kcal: Decimal | None = None
+     protein_g: Decimal | None = None
+     carbohydrates_g: Decimal | None = None
+     fat_g: Decimal | None = None
+     water_ml: Decimal | None = None
+   class GoalProgress(BaseModel):
+     target: Decimal
+     actual: Decimal
+     remaining: Decimal
+     percent_achieved: Decimal
+   class DailyGoalsProgress(BaseModel):
+     log_date: date
+     calories: GoalProgress | None = None
+     protein: GoalProgress | None = None
+     carbohydrates: GoalProgress | None = None
+     fat: GoalProgress | None = None
+     water: GoalProgress | None = None
+2. Erstelle src/app/repositories/goals_repository.py:
+   In-Memory, ein DailyGoals-Eintrag pro Tenant.
+   Methoden: get(tenant_id) -> DailyGoals | None, save(tenant_id, goals) -> DailyGoals
+3. Erstelle src/app/services/goals_service.py:
+   get_goals(tenant_id) -> DailyGoals
+   update_goals(tenant_id, goals) -> DailyGoals
+   get_progress(tenant_id, log_date) -> DailyGoalsProgress
+   (nutzt LogService für Tageswerte + GoalsRepository für Ziele)
+4. Erstelle src/app/api/v1/goals.py:
+   GET   /api/v1/goals
+   PUT   /api/v1/goals    (Body: DailyGoals, ersetzt komplett)
+   PATCH /api/v1/goals    (Body: DailyGoals mit allen Feldern optional)
+   GET   /api/v1/goals/progress?date=2025-01-15
+   (date optional, default: heute)
+5. Registriere in src/app/api/v1/router.py.
+6. Schreibe Unit-Tests für GoalsService und Integrationstests für alle 4 Endpoints.
+7. Stelle sicher:
+   - ruff check src/ tests/ gibt 0 Fehler
+   - mypy src/app --strict gibt 0 Fehler
+   - pytest läuft durch
+```
+
+---
+
+### Prompt 8 — Meal Templates
+
+```
+Du arbeitest am Projekt "Nutrition & Hydration Tracking API".
+Lies zuerst AGENTS.md vollständig (insbesondere Abschnitt 4a und 5.4),
+dann src/app/domain/models.py, src/app/services/log_service.py
+und src/app/api/v1/logs.py (als Muster).
+
+Implementiere wiederverwendbare Mahlzeiten-Templates.
+
+Technische Vorgaben:
+- DataSource muss StrEnum sein
+- Alle IDs als str (uuid.uuid4()) — nicht UUID-Typ
+- Tenant-Isolation: jede Repository-Methode nimmt tenant_id als ersten Parameter
+- TenantDep ohne = None Default
+
+Schritte:
+1. Neue Domain-Modelle in src/app/domain/models.py:
+   class MealTemplateEntry(BaseModel):
+     product_id: str
+     source: DataSource
+     quantity_g: Decimal = Field(gt=0)
+     note: str | None = None
+   class MealTemplate(BaseModel):
+     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+     tenant_id: str
+     name: str = Field(min_length=1, max_length=200)
+     entries: list[MealTemplateEntry] = Field(min_length=1)
+   class MealTemplateCreate(BaseModel):
+     name: str = Field(min_length=1, max_length=200)
+     entries: list[MealTemplateEntry] = Field(min_length=1)
+2. Erstelle src/app/repositories/template_repository.py:
+   In-Memory, strukturiert als dict[str, dict[str, MealTemplate]] (tenant → id → template).
+   Methoden: save(), find_by_id(), find_all(), delete()
+3. Erstelle src/app/services/template_service.py:
+   create(tenant_id, payload) -> MealTemplate
+   get_all(tenant_id) -> list[MealTemplate]
+   delete(tenant_id, template_id) -> bool
+   log_template(tenant_id, template_id, log_date) -> list[LogEntry]
+     (ruft für jeden Entry LogService.create_entry() auf)
+4. Erstelle src/app/api/v1/templates.py:
+   GET    /api/v1/templates
+   POST   /api/v1/templates                (Body: MealTemplateCreate, HTTP 201)
+   DELETE /api/v1/templates/{template_id}  (HTTP 204)
+   POST   /api/v1/templates/{template_id}/log?date=2025-01-15
+     (date optional, default: heute, gibt list[LogEntry] zurück)
+5. Registriere in src/app/api/v1/router.py.
+6. Schreibe Unit-Tests für TemplateService (inkl. Tenant-Isolation)
+   und Integrationstests für alle Endpoints.
+7. Stelle sicher:
+   - ruff check src/ tests/ gibt 0 Fehler
+   - mypy src/app --strict gibt 0 Fehler
+   - pytest läuft durch
+```
+
+---
+
+### Prompt 9 — Barcode Shortcut
+
+```
+Du arbeitest am Projekt "Nutrition & Hydration Tracking API".
+Lies zuerst AGENTS.md vollständig (insbesondere Abschnitt 4a und 5.4),
+dann src/app/adapters/open_food_facts.py, src/app/domain/ports.py
+und src/app/api/v1/products.py (anlegen falls nicht vorhanden).
+
+Implementiere einen Barcode-Lookup ohne Source-Angabe.
+
+Technische Vorgaben:
+- Suchreihenfolge konfigurierbar via Settings als list[str]
+- Adapter-Fallback: ProductNotFoundError wird gefangen, nächster Adapter versucht
+- ExternalApiError bei Netzwerkproblemen wird direkt als HTTP 502 weitergegeben
+- Alle Typannotierungen vollständig für mypy --strict
+
+Schritte:
+1. Ergänze in src/app/core/config.py:
+   BARCODE_LOOKUP_ORDER: list[str] = ["open_food_facts", "usda_fooddata"]
+2. Erstelle src/app/services/barcode_service.py:
+   class BarcodeService mit lookup(barcode: str) -> GeneralizedProduct
+   Iteriert über BARCODE_LOOKUP_ORDER, holt Adapter aus Registry.
+   Fängt ProductNotFoundError → nächster Adapter.
+   Wenn alle Adapter ProductNotFoundError → raise ProductNotFoundError.
+   Wenn ein Adapter ExternalApiError → sofort weiterwerfen.
+3. GET /api/v1/products/barcode/{barcode} in src/app/api/v1/products.py:
+   Authentifizierung via TenantDep.
+   Ruft BarcodeService.lookup() auf.
+   ProductNotFoundError → HTTP 404
+   ExternalApiError → HTTP 502
+4. Registriere BarcodeService in src/app/api/dependencies.py.
+5. Schreibe tests/unit/test_barcode_service.py:
+   - test_found_in_first_adapter: OFF findet Produkt → USDA nicht aufgerufen
+   - test_fallback_to_second_adapter: OFF wirft ProductNotFoundError → USDA aufgerufen
+   - test_not_found_anywhere: beide werfen ProductNotFoundError → ProductNotFoundError
+   - test_external_api_error_propagates: OFF wirft ExternalApiError → sofort weitergeworfen
+6. Schreibe Integrationstests in tests/integration/test_api_products.py.
+7. Stelle sicher:
+   - ruff check src/ tests/ gibt 0 Fehler
+   - mypy src/app --strict gibt 0 Fehler
+   - pytest läuft durch
+```
+
+---
+
+### Prompt 10 — Prometheus Metrics
+
+```
+Du arbeitest am Projekt "Nutrition & Hydration Tracking API".
+Lies zuerst AGENTS.md vollständig (insbesondere Abschnitt 4a und 5.4),
+dann src/app/main.py und src/app/adapters/open_food_facts.py.
+
+Implementiere einen Prometheus Metrics Endpoint.
+
+Technische Vorgaben:
+- prometheus-client als einzige neue Dependency
+- Metrics als Modul-Level Singletons in core/metrics.py — nie als Instanzvariablen
+- /metrics ohne Authentifizierung (internes Monitoring)
+- Alle Typannotierungen vollständig für mypy --strict
+
+Schritte:
+1. Ergänze prometheus-client>=0.20 in pyproject.toml.
+2. Erstelle src/app/core/metrics.py:
+   REQUEST_COUNT = Counter("http_requests_total", "...", ["method", "path", "status_code"])
+   EXTERNAL_API_COUNT = Counter("external_api_requests_total", "...", ["source", "status"])
+   EXTERNAL_API_DURATION = Histogram("external_api_duration_seconds", "...", ["source"])
+   CACHE_HITS = Counter("cache_hits_total", "...")
+   CACHE_MISSES = Counter("cache_misses_total", "...")
+3. Ergänze Starlette Middleware in src/app/main.py:
+   Inkrementiert REQUEST_COUNT nach jedem Request mit method, path, status_code.
+   Nutze BaseHTTPMiddleware — Signatur muss mypy --strict bestehen:
+   async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response
+4. Instrumentiere beide Adapter (open_food_facts.py, usda_fooddata.py):
+   EXTERNAL_API_DURATION.labels(source="...").time() als Context-Manager um HTTP-Calls.
+   EXTERNAL_API_COUNT inkrementieren nach jedem Call (status: "success" oder "error").
+5. GET /metrics in src/app/main.py:
+   from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+   return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+6. Ergänze in deploy/charts/nutrition-tracker/values.yaml:
+   podAnnotations:
+     prometheus.io/scrape: "true"
+     prometheus.io/port: "8000"
+     prometheus.io/path: "/metrics"
+7. Schreibe tests/unit/test_metrics.py:
+   Prüfe dass Counter nach einem simulierten Request inkrementiert wurde.
+8. Stelle sicher:
+   - ruff check src/ tests/ gibt 0 Fehler
+   - mypy src/app --strict gibt 0 Fehler
+   - pytest läuft durch
+```
+
+---
+
+### Prompt 11 — Webhook Notifications (ntfy.sh / Gotify)
+
+```
+Du arbeitest am Projekt "Nutrition & Hydration Tracking API".
+Lies zuerst AGENTS.md vollständig (insbesondere Abschnitt 4a und 5.4),
+dann src/app/core/config.py und src/app/services/log_service.py.
+
+Implementiere Webhook-Benachrichtigungen für Homelab-Notification-Dienste.
+
+Technische Vorgaben:
+- Fire-and-forget: asyncio.create_task() — Fehler werden geloggt, nie weitergereicht
+- Auto-Detection des Dienstes anhand der URL
+- NotificationService via DI in LogService injiziert — nie als globale Variable
+- Alle Typannotierungen vollständig für mypy --strict
+- httpx.AsyncClient für HTTP-Calls (bereits im Projekt vorhanden)
+
+Schritte:
+1. Ergänze in src/app/core/config.py:
+   WEBHOOK_URL: str | None = None
+   WEBHOOK_ENABLED: bool = False
+2. Erstelle src/app/services/notification_service.py:
+   class NotificationService mit send(title: str, message: str) -> None (async).
+   Auto-Detection:
+     "ntfy.sh" in url → POST {url}/{topic} mit Text-Body und Title-Header
+     sonst (Gotify) → POST {url}/message mit JSON {"title": ..., "message": ..., "priority": 5}
+   Fire-and-forget via asyncio.create_task().
+   Wenn WEBHOOK_ENABLED=False → sofort return ohne HTTP-Call.
+3. Trigger-Events in LogService (nach erfolgreichem save()):
+   - Erster Log-Eintrag des Tages: "Logging started for {date}"
+   - Optional: Kalorienziel erreicht (nur wenn GoalsService verfügbar)
+4. Injiziere NotificationService in LogService.__init__():
+   notification_service: NotificationService | None = None
+   Wenn None → keine Notifications (rückwärtskompatibel).
+5. Ergänze get_notification_service() in src/app/api/dependencies.py.
+6. Schreibe tests/unit/test_notification_service.py:
+   Mocke httpx.AsyncClient.
+   - test_ntfy_sends_correct_request: URL-Format und Header prüfen
+   - test_gotify_sends_correct_json: JSON-Body prüfen
+   - test_disabled_webhook_skips_http: kein HTTP-Call wenn WEBHOOK_ENABLED=False
+   - test_error_is_not_propagated: HTTP-Fehler wird geloggt, nicht weitergereicht
+7. Stelle sicher:
+   - ruff check src/ tests/ gibt 0 Fehler
+   - mypy src/app --strict gibt 0 Fehler
+   - pytest läuft durch
+```
 
 ---
 
