@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
-from typing import Any
 
 from app.domain.models import (
     DailyHydrationSummary,
@@ -16,6 +15,7 @@ from app.domain.models import (
 )
 from app.domain.ports import ProductSourcePort
 from app.repositories.base import AbstractLogRepository
+from app.repositories.goals_repository import GoalsRepository
 from app.services.notification_service import NotificationService
 from app.services.product_cache import ProductCache
 
@@ -27,16 +27,13 @@ class LogService:
         repository: AbstractLogRepository,
         product_cache: ProductCache,
         notification_service: NotificationService | None = None,
+        goals_repository: GoalsRepository | None = None,
     ) -> None:
         self._adapters = adapter_registry
         self._repo = repository
         self._cache = product_cache
         self._notification_service = notification_service
-        self._goals_service: Any = None
-
-    def set_goals_service(self, service: Any) -> None:
-        """Sets the goals service for calculating goal-related notifications."""
-        self._goals_service = service
+        self._goals_repo = goals_repository
 
     async def create_entry(self, tenant_id: str, payload: LogEntryCreate) -> LogEntry:
         # 1. Check cache
@@ -72,9 +69,9 @@ class LogService:
             )
 
         # 2. Check for calorie goal reached
-        if self._goals_service:
-            goals = await self._goals_service.get_goals(tenant_id)
-            if goals.calories_kcal is not None:
+        if self._goals_repo:
+            goals = self._goals_repo.get(tenant_id)
+            if goals and goals.calories_kcal is not None:
                 summary = await self.get_daily_nutrition(tenant_id, entry.log_date)
                 current_total = summary.totals.calories_kcal
                 previous_total = current_total - entry.scaled_macros.calories_kcal

@@ -40,7 +40,6 @@ class NotificationService:
                 )
             else:
                 # Gotify style (fallback): POST {url}/message with JSON body
-                # Ensure we don't double up on slashes if the URL ends with one
                 base_url = url.rstrip("/")
                 await self._http_client.post(
                     f"{base_url}/message",

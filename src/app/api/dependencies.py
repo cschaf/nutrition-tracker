@@ -122,7 +122,6 @@ async def get_log_repository(
     return _repository
 
 
-@lru_cache
 def get_notification_service(
     client: httpx.AsyncClient = Depends(get_http_client),
     settings: Settings = Depends(get_settings),
@@ -130,23 +129,25 @@ def get_notification_service(
     return NotificationService(http_client=client, settings=settings)
 
 
+@lru_cache
+def get_goals_repository() -> GoalsRepository:
+    return GoalsRepository()
+
+
 def get_log_service(
     adapter_registry: dict[DataSource, ProductSourcePort] = Depends(get_adapter_registry),
     repository: AbstractLogRepository = Depends(get_log_repository),
     product_cache: ProductCache = Depends(get_product_cache),
     notification_service: NotificationService = Depends(get_notification_service),
+    goals_repository: GoalsRepository = Depends(get_goals_repository),
 ) -> LogService:
     return LogService(
         adapter_registry=adapter_registry,
         repository=repository,
         product_cache=product_cache,
         notification_service=notification_service,
+        goals_repository=goals_repository,
     )
-
-
-@lru_cache
-def get_goals_repository() -> GoalsRepository:
-    return GoalsRepository()
 
 
 @lru_cache
@@ -165,9 +166,7 @@ def get_goals_service(
     repository: GoalsRepository = Depends(get_goals_repository),
     log_service: LogService = Depends(get_log_service),
 ) -> GoalsService:
-    service = GoalsService(repository=repository, log_service=log_service)
-    log_service.set_goals_service(service)
-    return service
+    return GoalsService(repository=repository, log_service=log_service)
 
 
 def get_export_service() -> ExportService:
