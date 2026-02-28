@@ -21,15 +21,12 @@ def mock_generalized_product():
             carbohydrates_g=Decimal("14"),
             fat_g=Decimal("0.2"),
         ),
-        micronutrients=Micronutrients(
-            potassium_mg=Decimal("107")
-        ),
-        is_liquid=False
+        micronutrients=Micronutrients(potassium_mg=Decimal("107")),
+        is_liquid=False,
     )
 
-def test_create_log_entry_success(
-    client: TestClient, mock_generalized_product: GeneralizedProduct
-):
+
+def test_create_log_entry_success(client: TestClient, mock_generalized_product: GeneralizedProduct):
     # Mock den Service-Aufruf
     with patch(
         "app.services.log_service.LogService.create_entry", new_callable=AsyncMock
@@ -41,18 +38,19 @@ def test_create_log_entry_success(
             "product": mock_generalized_product,
             "quantity_g": Decimal("150.5"),
             "consumed_at": "2023-10-27T10:00:00Z",
-            "note": "Lunch snack"
+            "note": "Lunch snack",
         }
 
         payload = {
             "product_id": "test-product-123",
             "source": "manual",
             "quantity_g": 150.5,
-            "note": "Lunch snack"
+            "note": "Lunch snack",
         }
 
         # Bypass security for integration test
         from app.core.security import get_tenant_id
+
         app.dependency_overrides[get_tenant_id] = lambda: "tenant_alice"
 
         try:
@@ -63,8 +61,10 @@ def test_create_log_entry_success(
         finally:
             app.dependency_overrides.clear()
 
+
 def test_get_daily_log_empty(client: TestClient):
     from app.core.security import get_tenant_id
+
     app.dependency_overrides[get_tenant_id] = lambda: "tenant_alice"
     try:
         response = client.get("/api/v1/logs/daily", headers={"X-API-Key": "any"})
@@ -72,6 +72,7 @@ def test_get_daily_log_empty(client: TestClient):
         assert response.json() == []
     finally:
         app.dependency_overrides.clear()
+
 
 def test_health_check(client: TestClient):
     response = client.get("/healthz")

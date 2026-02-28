@@ -16,11 +16,13 @@ def clear_goals():
     yield
     get_goals_repository()._goals.clear()
 
+
 @pytest.fixture
 def alice_tenant():
     app.dependency_overrides[get_tenant_id] = lambda: "tenant_alice"
     yield "tenant_alice"
     app.dependency_overrides.clear()
+
 
 def test_get_goals_default(client: TestClient, alice_tenant):
     response = client.get("/api/v1/goals/", headers={"X-API-Key": "any"})
@@ -30,8 +32,9 @@ def test_get_goals_default(client: TestClient, alice_tenant):
         "protein_g": None,
         "carbohydrates_g": None,
         "fat_g": None,
-        "water_ml": None
+        "water_ml": None,
     }
+
 
 def test_replace_goals(client: TestClient, alice_tenant):
     goals = {
@@ -39,7 +42,7 @@ def test_replace_goals(client: TestClient, alice_tenant):
         "protein_g": "150.0",
         "carbohydrates_g": "300.0",
         "fat_g": "80.0",
-        "water_ml": "3000.0"
+        "water_ml": "3000.0",
     }
     response = client.put("/api/v1/goals/", headers={"X-API-Key": "any"}, json=goals)
     assert response.status_code == 200
@@ -47,24 +50,21 @@ def test_replace_goals(client: TestClient, alice_tenant):
     data = response.json()
     assert Decimal(data["calories_kcal"]) == Decimal("2500.0")
 
+
 def test_patch_goals(client: TestClient, alice_tenant):
     # Set initial goals
-    initial_goals = {
-        "calories_kcal": "2000.0",
-        "water_ml": "2000.0"
-    }
+    initial_goals = {"calories_kcal": "2000.0", "water_ml": "2000.0"}
     client.put("/api/v1/goals/", headers={"X-API-Key": "any"}, json=initial_goals)
 
     # Patch goals
-    patch_data = {
-        "calories_kcal": "2200.0"
-    }
+    patch_data = {"calories_kcal": "2200.0"}
     response = client.patch("/api/v1/goals/", headers={"X-API-Key": "any"}, json=patch_data)
     assert response.status_code == 200
     data = response.json()
     assert Decimal(data["calories_kcal"]) == Decimal("2200.0")
     assert Decimal(data["water_ml"]) == Decimal("2000.0")
     assert data["protein_g"] is None
+
 
 def test_get_progress_empty(client: TestClient, alice_tenant):
     today = date.today().isoformat()
@@ -75,13 +75,11 @@ def test_get_progress_empty(client: TestClient, alice_tenant):
     assert data["calories"] is None
     assert data["water"] is None
 
+
 def test_get_progress_with_goals(client: TestClient, alice_tenant):
     today = date.today().isoformat()
     # Set goals
-    goals = {
-        "calories_kcal": "2000.0",
-        "water_ml": "2000.0"
-    }
+    goals = {"calories_kcal": "2000.0", "water_ml": "2000.0"}
     client.put("/api/v1/goals/", headers={"X-API-Key": "any"}, json=goals)
 
     response = client.get(f"/api/v1/goals/progress?date={today}", headers={"X-API-Key": "any"})
@@ -97,6 +95,7 @@ def test_get_progress_with_goals(client: TestClient, alice_tenant):
     assert Decimal(data["water"]["actual"]) == Decimal("0.0")
     assert Decimal(data["water"]["remaining"]) == Decimal("2000.0")
     assert Decimal(data["water"]["percent_achieved"]) == Decimal("0.0")
+
 
 def test_tenant_isolation_goals(client: TestClient):
     # Alice sets goals

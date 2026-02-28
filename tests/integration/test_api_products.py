@@ -28,15 +28,14 @@ def test_search_products_off_success(
         id="123",
         source=DataSource.OPEN_FOOD_FACTS,
         name="Test Product",
-        macronutrients=Macronutrients(
-            calories_kcal=100, protein_g=10, carbohydrates_g=20, fat_g=5
-        ),
+        macronutrients=Macronutrients(calories_kcal=100, protein_g=10, carbohydrates_g=20, fat_g=5),
     )
     off_adapter = mock_adapter_registry[DataSource.OPEN_FOOD_FACTS]
     off_adapter.search.return_value = [mock_product]
 
     from app.api.dependencies import get_adapter_registry
     from app.core.security import get_tenant_id
+
     app.dependency_overrides[get_tenant_id] = lambda: "tenant_alice"
     app.dependency_overrides[get_adapter_registry] = lambda: mock_adapter_registry
 
@@ -65,15 +64,14 @@ def test_search_products_usda_success(
         id="456",
         source=DataSource.USDA_FOODDATA,
         name="USDA Product",
-        macronutrients=Macronutrients(
-            calories_kcal=200, protein_g=5, carbohydrates_g=40, fat_g=2
-        ),
+        macronutrients=Macronutrients(calories_kcal=200, protein_g=5, carbohydrates_g=40, fat_g=2),
     )
     usda_adapter = mock_adapter_registry[DataSource.USDA_FOODDATA]
     usda_adapter.search.return_value = [mock_product]
 
     from app.api.dependencies import get_adapter_registry
     from app.core.security import get_tenant_id
+
     app.dependency_overrides[get_tenant_id] = lambda: "tenant_alice"
     app.dependency_overrides[get_adapter_registry] = lambda: mock_adapter_registry
 
@@ -96,6 +94,7 @@ def test_search_products_usda_success(
 
 def test_search_products_invalid_source(client: TestClient, alice_headers: dict):
     from app.core.security import get_tenant_id
+
     app.dependency_overrides[get_tenant_id] = lambda: "tenant_alice"
     try:
         response = client.get(
@@ -111,6 +110,7 @@ def test_search_products_unsupported_source_for_search(
     client: TestClient, alice_headers: dict, mock_adapter_registry: dict
 ):
     from app.core.security import get_tenant_id
+
     app.dependency_overrides[get_tenant_id] = lambda: "tenant_alice"
 
     # Create a registry without USDA adapter
@@ -118,6 +118,7 @@ def test_search_products_unsupported_source_for_search(
         DataSource.OPEN_FOOD_FACTS: mock_adapter_registry[DataSource.OPEN_FOOD_FACTS],
     }
     from app.api.dependencies import get_adapter_registry
+
     app.dependency_overrides[get_adapter_registry] = lambda: registry_without_usda
 
     try:
@@ -161,6 +162,7 @@ def test_search_products_external_api_error(
 
 def test_search_products_limit_validation(client: TestClient, alice_headers: dict):
     from app.core.security import get_tenant_id
+
     app.dependency_overrides[get_tenant_id] = lambda: "tenant_alice"
     try:
         # Too small
@@ -180,6 +182,7 @@ def test_search_products_limit_validation(client: TestClient, alice_headers: dic
 
 def test_create_manual_product_success(client: TestClient, alice_headers: dict):
     from app.core.security import get_tenant_id
+
     app.dependency_overrides[get_tenant_id] = lambda: "tenant_alice"
 
     payload = {
@@ -189,9 +192,9 @@ def test_create_manual_product_success(client: TestClient, alice_headers: dict):
             "calories_kcal": "450.5",
             "protein_g": "5.0",
             "carbohydrates_g": "60.0",
-            "fat_g": "20.0"
+            "fat_g": "20.0",
         },
-        "is_liquid": False
+        "is_liquid": False,
     }
 
     try:
@@ -214,11 +217,7 @@ def test_create_manual_product_success(client: TestClient, alice_headers: dict):
         assert any(p["id"] == product_id for p in search_results)
 
         # 3. Use it in a log entry
-        log_payload = {
-            "product_id": product_id,
-            "source": "manual",
-            "quantity_g": "50"
-        }
+        log_payload = {"product_id": product_id, "source": "manual", "quantity_g": "50"}
         response = client.post("/api/v1/logs/", json=log_payload, headers=alice_headers)
         assert response.status_code == 201
         log_entry = response.json()
@@ -230,6 +229,7 @@ def test_create_manual_product_success(client: TestClient, alice_headers: dict):
 
 def test_create_manual_liquid_product_validation(client: TestClient, alice_headers: dict):
     from app.core.security import get_tenant_id
+
     app.dependency_overrides[get_tenant_id] = lambda: "tenant_alice"
 
     payload = {
@@ -238,9 +238,9 @@ def test_create_manual_liquid_product_validation(client: TestClient, alice_heade
             "calories_kcal": "40",
             "protein_g": "0",
             "carbohydrates_g": "10",
-            "fat_g": "0"
+            "fat_g": "0",
         },
-        "is_liquid": True
+        "is_liquid": True,
         # missing volume_ml_per_100g
     }
 

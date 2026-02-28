@@ -133,6 +133,31 @@ class LogEntry(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+class MealTemplateEntry(BaseModel):
+    product_id: str
+    source: DataSource
+    quantity_g: Decimal = Field(gt=0)
+    note: str | None = None
+
+    model_config = {"frozen": True}
+
+
+class MealTemplate(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    tenant_id: str
+    name: str = Field(min_length=1, max_length=200)
+    entries: list[MealTemplateEntry] = Field(min_length=1)
+
+    model_config = {"frozen": True}
+
+
+class MealTemplateCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    entries: list[MealTemplateEntry] = Field(min_length=1)
+
+    model_config = {"frozen": True}
+
+
 class LogEntryCreate(BaseModel):
     product_id: str = Field(description="Produkt-ID aus der externen Quelle")
     source: DataSource

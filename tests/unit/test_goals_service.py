@@ -19,13 +19,16 @@ from app.services.log_service import LogService
 def mock_repo():
     return MagicMock(spec=GoalsRepository)
 
+
 @pytest.fixture
 def mock_log_service():
     return MagicMock(spec=LogService)
 
+
 @pytest.fixture
 def goals_service(mock_repo, mock_log_service):
     return GoalsService(repository=mock_repo, log_service=mock_log_service)
+
 
 @pytest.mark.asyncio
 async def test_get_goals_returns_default_if_none(goals_service, mock_repo):
@@ -34,12 +37,14 @@ async def test_get_goals_returns_default_if_none(goals_service, mock_repo):
     assert result == DailyGoals()
     mock_repo.get.assert_called_once_with("tenant_1")
 
+
 @pytest.mark.asyncio
 async def test_get_goals_returns_saved_goals(goals_service, mock_repo):
     goals = DailyGoals(calories_kcal=Decimal("2000"))
     mock_repo.get.return_value = goals
     result = await goals_service.get_goals("tenant_1")
     assert result == goals
+
 
 @pytest.mark.asyncio
 async def test_update_goals(goals_service, mock_repo):
@@ -48,6 +53,7 @@ async def test_update_goals(goals_service, mock_repo):
     result = await goals_service.update_goals("tenant_1", goals)
     assert result == goals
     mock_repo.save.assert_called_once_with("tenant_1", goals)
+
 
 @pytest.mark.asyncio
 async def test_get_progress(goals_service, mock_repo, mock_log_service):
@@ -64,15 +70,13 @@ async def test_get_progress(goals_service, mock_repo, mock_log_service):
             calories_kcal=Decimal("1000"),
             protein_g=Decimal("50"),
             carbohydrates_g=Decimal("100"),
-            fat_g=Decimal("30")
-        )
+            fat_g=Decimal("30"),
+        ),
     )
     mock_log_service.get_daily_nutrition = AsyncMock(return_value=nutrition)
 
     hydration = DailyHydrationSummary(
-        log_date=today,
-        total_volume_ml=Decimal("1500"),
-        contributing_entries=2
+        log_date=today, total_volume_ml=Decimal("1500"), contributing_entries=2
     )
     mock_log_service.get_daily_hydration = AsyncMock(return_value=hydration)
 

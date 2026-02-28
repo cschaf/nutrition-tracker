@@ -11,9 +11,7 @@ from app.services.product_service import ProductService
 router = APIRouter(prefix="/products", tags=["Products"])
 
 TenantDep = Annotated[str, Security(get_tenant_id)]
-AdapterRegistryDep = Annotated[
-    dict[DataSource, ProductSourcePort], Depends(get_adapter_registry)
-]
+AdapterRegistryDep = Annotated[dict[DataSource, ProductSourcePort], Depends(get_adapter_registry)]
 ProductServiceDep = Annotated[ProductService, Depends(get_product_service)]
 
 
