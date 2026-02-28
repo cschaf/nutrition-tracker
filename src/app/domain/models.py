@@ -111,8 +111,12 @@ class LogEntry(BaseModel):
             protein_g=(m.protein_g * factor).quantize(Decimal("0.01")),
             carbohydrates_g=(m.carbohydrates_g * factor).quantize(Decimal("0.01")),
             fat_g=(m.fat_g * factor).quantize(Decimal("0.01")),
-            fiber_g=(m.fiber_g * factor).quantize(Decimal("0.01")) if m.fiber_g else None,
-            sugar_g=(m.sugar_g * factor).quantize(Decimal("0.01")) if m.sugar_g else None,
+            fiber_g=(
+                (m.fiber_g * factor).quantize(Decimal("0.01")) if m.fiber_g is not None else None
+            ),
+            sugar_g=(
+                (m.sugar_g * factor).quantize(Decimal("0.01")) if m.sugar_g is not None else None
+            ),
         )
 
     @property
