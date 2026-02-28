@@ -176,3 +176,76 @@ def test_search_products_limit_validation(client: TestClient, alice_headers: dic
         assert response.status_code == 422
     finally:
         app.dependency_overrides.clear()
+
+
+def test_create_manual_product_success(client: TestClient, alice_headers: dict):
+    from app.core.security import get_tenant_id
+    app.dependency_overrides[get_tenant_id] = lambda: "tenant_alice"
+
+    payload = {
+        "name": "Handmade Cookie",
+        "brand": "My Kitchen",
+        "macronutrients": {
+            "calories_kcal": "450.5",
+            "protein_g": "5.0",
+            "carbohydrates_g": "60.0",
+            "fat_g": "20.0"
+        },
+        "is_liquid": False
+    }
+
+    try:
+        # 1. Create product
+        response = client.post("/api/v1/products/", json=payload, headers=alice_headers)
+        assert response.status_code == 201
+        product = response.json()
+        assert product["name"] == "Handmade Cookie"
+        assert product["source"] == "manual"
+        assert "id" in product
+        product_id = product["id"]
+
+        # 2. Search for it
+        response = client.get(
+            "/api/v1/products/search?q=Cookie&source=manual", headers=alice_headers
+        )
+        assert response.status_code == 200
+        search_results = response.json()
+        assert len(search_results) >= 1
+        assert any(p["id"] == product_id for p in search_results)
+
+        # 3. Use it in a log entry
+        log_payload = {
+            "product_id": product_id,
+            "source": "manual",
+            "quantity_g": "50"
+        }
+        response = client.post("/api/v1/logs/", json=log_payload, headers=alice_headers)
+        assert response.status_code == 201
+        log_entry = response.json()
+        assert log_entry["product"]["id"] == product_id
+        assert log_entry["product"]["name"] == "Handmade Cookie"
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_create_manual_liquid_product_validation(client: TestClient, alice_headers: dict):
+    from app.core.security import get_tenant_id
+    app.dependency_overrides[get_tenant_id] = lambda: "tenant_alice"
+
+    payload = {
+        "name": "Homemade Lemonade",
+        "macronutrients": {
+            "calories_kcal": "40",
+            "protein_g": "0",
+            "carbohydrates_g": "10",
+            "fat_g": "0"
+        },
+        "is_liquid": True
+        # missing volume_ml_per_100g
+    }
+
+    try:
+        response = client.post("/api/v1/products/", json=payload, headers=alice_headers)
+        assert response.status_code == 422
+    finally:
+        app.dependency_overrides.clear()

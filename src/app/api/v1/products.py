@@ -2,10 +2,11 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Security, status
 
-from app.api.dependencies import get_adapter_registry
+from app.api.dependencies import get_adapter_registry, get_product_service
 from app.core.security import get_tenant_id
-from app.domain.models import DataSource, GeneralizedProduct
+from app.domain.models import DataSource, GeneralizedProduct, ManualProductCreate
 from app.domain.ports import ExternalApiError, ProductSourcePort
+from app.services.product_service import ProductService
 
 router = APIRouter(prefix="/products", tags=["Products"])
 
@@ -13,6 +14,7 @@ TenantDep = Annotated[str, Security(get_tenant_id)]
 AdapterRegistryDep = Annotated[
     dict[DataSource, ProductSourcePort], Depends(get_adapter_registry)
 ]
+ProductServiceDep = Annotated[ProductService, Depends(get_product_service)]
 
 
 @router.get("/search", response_model=list[GeneralizedProduct])
@@ -46,3 +48,15 @@ async def search_products(
         return await adapter.search(query=q, limit=limit)
     except ExternalApiError as e:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e))
+
+
+@router.post("/", response_model=GeneralizedProduct, status_code=status.HTTP_201_CREATED)
+async def create_manual_product(
+    tenant_id: TenantDep,
+    service: ProductServiceDep,
+    payload: ManualProductCreate,
+) -> GeneralizedProduct:
+    """
+    Erstellt ein manuelles Produkt.
+    """
+    return service.create_manual_product(payload)

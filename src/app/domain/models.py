@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import uuid
+from typing import Self
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from enum import StrEnum
@@ -71,14 +72,11 @@ class GeneralizedProduct(BaseModel):
         description="Für Flüssigkeiten: Milliliter pro 100g (oft 100ml/100g = 1:1)",
     )
 
-    @field_validator("volume_ml_per_100g", mode="after")
-    @classmethod
-    def liquid_requires_volume(cls, v: Decimal | None, info: object) -> Decimal | None:
-        # Pydantic v2: info.data enthält bereits validierte Felder
-        data = getattr(info, "data", {})
-        if data.get("is_liquid") and v is None:
+    @model_validator(mode="after")
+    def liquid_requires_volume(self) -> Self:
+        if self.is_liquid and self.volume_ml_per_100g is None:
             raise ValueError("volume_ml_per_100g muss gesetzt sein, wenn is_liquid=True")
-        return v
+        return self
 
     model_config = {"frozen": True}
 
@@ -154,6 +152,26 @@ class DailyHydrationSummary(BaseModel):
     log_date: date
     total_volume_ml: Decimal
     contributing_entries: int
+
+
+class ManualProductCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=512)
+    brand: str | None = None
+    macronutrients: Macronutrients
+    micronutrients: Micronutrients | None = None
+    is_liquid: bool = False
+    volume_ml_per_100g: Decimal | None = Field(
+        default=None,
+        ge=0,
+    )
+
+    @model_validator(mode="after")
+    def liquid_requires_volume(self) -> Self:
+        if self.is_liquid and self.volume_ml_per_100g is None:
+            raise ValueError("volume_ml_per_100g muss gesetzt sein, wenn is_liquid=True")
+        return self
+
+    model_config = {"frozen": True}
 
 
 class DateRangeParams(BaseModel):
